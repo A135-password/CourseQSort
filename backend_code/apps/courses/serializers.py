@@ -1,0 +1,102 @@
+from rest_framework import serializers
+from apps.courses.models import Major, Teacher, Classroom, Course, Student
+
+
+class MajorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Major
+        fields = ['id', 'name', 'code', 'student_count']
+
+
+class TeacherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Teacher
+        fields = ['id', 'name', 'employee_no', 'department', 'unavailable_slots']
+
+
+class ClassroomSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classroom
+        fields = ['id', 'name', 'capacity', 'building', 'equipment_types', 'is_lab']
+
+
+class StudentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = ['id', 'student_no', 'name']
+
+
+class NestedMajorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Major
+        fields = ['id', 'name']
+
+
+class NestedTeacherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Teacher
+        fields = ['id', 'name']
+
+
+class CourseListSerializer(serializers.ModelSerializer):
+    major = NestedMajorSerializer(read_only=True)
+    teachers = NestedTeacherSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Course
+        fields = [
+            'id', 'name', 'code', 'credit', 'hours',
+            'major', 'teachers', 'required_classroom_types',
+            'expected_student_count', 'is_professional_course',
+        ]
+
+
+class CourseDetailSerializer(serializers.ModelSerializer):
+    major = NestedMajorSerializer(read_only=True)
+    teachers = NestedTeacherSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Course
+        fields = [
+            'id', 'name', 'code', 'credit', 'hours',
+            'major', 'teachers', 'required_classroom_types',
+            'expected_student_count', 'is_professional_course',
+            'prerequisites', 'semester', 'created_at',
+        ]
+
+
+class CourseCreateSerializer(serializers.ModelSerializer):
+    major_id = serializers.IntegerField(required=False, allow_null=True)
+    teacher_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    class Meta:
+        model = Course
+        fields = [
+            'name', 'code', 'credit', 'hours',
+            'major_id', 'teacher_ids', 'required_classroom_types',
+            'expected_student_count', 'is_professional_course',
+        ]
+
+    def create(self, validated_data):
+        teacher_ids = validated_data.pop('teacher_ids', [])
+        major_id = validated_data.pop('major_id', None)
+        if major_id:
+            validated_data['major_id'] = major_id
+        course = Course.objects.create(**validated_data)
+        if teacher_ids:
+            course.teachers.set(Teacher.objects.filter(id__in=teacher_ids))
+        return course
+
+    def update(self, instance, validated_data):
+        teacher_ids = validated_data.pop('teacher_ids', None)
+        major_id = validated_data.pop('major_id', None)
+        if major_id is not None:
+            instance.major_id = major_id
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if teacher_ids is not None:
+            instance.teachers.set(Teacher.objects.filter(id__in=teacher_ids))
+        return instance

@@ -1,0 +1,44 @@
+// 在教务系统里面f12直接回车就可用了，这个脚本只会爬取前100条课程信息，有需要可以自行更改条数
+(async () => {
+  const API_URL = 'https://jwxt.sysu.edu.cn/jwxt/schedule/agg/schoolOpeningCoursesSchedule/querySchoolOpeningCourses?_t=' + Date.now();
+  const PAGE_SIZE = 10;
+  const MAX_PAGES = 10;        // 10 × 10 = 100 条
+  const HEADERS = {
+    'accept': 'application/json, text/plain, */*',
+    'content-type': 'application/json;charset=UTF-8',
+    'lastaccesstime': String(Date.now()),
+    'x-requested-with': 'XMLHttpRequest'
+  };
+
+  let allData = [];
+  for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
+    const body = JSON.stringify({
+      pageNo,
+      pageSize: PAGE_SIZE,
+      total: false,
+      param: { yearTerm: '2025-2' }
+    });
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: HEADERS,
+      credentials: 'include',
+      body
+    });
+    const json = await res.json();
+    const records = json.data?.records || json.data || [];
+    if (records.length === 0) break;
+    allData = allData.concat(records);
+    console.log(`第 ${pageNo} 页完成，已获取 ${allData.length} 条`);
+  }
+
+  allData = allData.slice(0, 100);
+
+  const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '全校开课课程_2025-2_前100条.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  console.log(`下载完成，共 ${allData.length} 条记录`);
+})();

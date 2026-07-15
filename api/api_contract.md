@@ -270,6 +270,41 @@
 
 ---
 
+### 2.4.1 从旧教务系统爬取的 JSON 数据导入
+
+> ⚠️ **注意**：本接口仅接受标准格式的开课任务书 Excel 文件。对于从旧教务系统爬取得到的 JSON 格式课程数据（如 `test/test.json`），系统**不提供 REST API 端点**，而是通过 Django Management Command 完成一次性数据迁移。
+
+**使用方式**：
+
+```bash
+# 基本导入
+python manage.py import_from_crawled_json <json文件路径>
+
+# 指定学期（覆盖 JSON 中的 yearTerm）
+python manage.py import_from_crawled_json test/test.json --semester 2026-spring
+
+# 预览模式（只输出统计，不写入数据库）
+python manage.py import_from_crawled_json test/test.json --dry-run
+```
+
+**JSON 字段 → 数据库映射**：
+
+| test.json 字段 | 写入目标 | 处理说明 |
+|---|---|---|
+| `courseId` | `Course.course_id_from_source` | 作为唯一标识，防止重复导入 |
+| `courseName` / `courseNum` | `Course.name` / `Course.code` | 课程名称与编码 |
+| `score` | `Course.credit` | 学分 |
+| `yearTerm` | `Course.semester` | 学期字符串 |
+| `courseCategoryName` | `Course.is_professional_course` | `专必`/`专选` → `true`，`公必` → `false` |
+| `limitNumber` | `Course.expected_student_count` | 容量上限 |
+| `teachingName` | `Teacher.name` | 按 `,` 拆分，每人按姓名+学院去重 |
+| `openingUnitName` | `Teacher.department` / `Major` 的学院信息 | 开课学院 |
+| `teachingTimePlaceStr` | `CourseScheduleItem`（一对多） | 按 `,` 拆分为多条，每条解析出周次/星期/节次/地点/教师 |
+| `readObj` | `Student` / `Major` | 解析年级、专业、班级信息 |
+| `weekDay` / `timePlaceId` | 辅助校验 | 与 `teachingTimePlaceStr` 解析结果对照 |
+
+---
+
 ### 2.5 教师列表
 
 - **URL**: `GET /api/v1/admin/teachers/`
