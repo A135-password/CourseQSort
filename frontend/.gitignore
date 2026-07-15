@@ -1,0 +1,22 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.swp
+
+# OS
+.DS_Store
+
+# Runtime
+node_modules/
+*.log
+*.exe
+
+# Environment
+.env
+.venv/
+venv/
