@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的课表</title>
+    <style>
+        body { font-family: "Microsoft YaHei", sans-serif; margin: 20px; }
+        h2 { text-align: center; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: center; vertical-align: middle; font-size: 14px; }
+        th { background-color: #f0f0f0; }
+        .empty { color: #ccc; }
+        .no-print { margin-bottom: 15px; }
+        @media print { .no-print { display: none; } }
+        .loading { text-align: center; padding: 40px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button onclick="window.print()">打印课表</button>
+        <button onclick="window.location.href='index.html'">返回选课</button>
+        <span id="data-mode-badge" style="margin-left:10px; color:#999; font-size:12px;"></span>
+    </div>
+
+    <h2 id="schedule-title">我的课表</h2>
+    <div id="loading-indicator" class="loading">加载课表中...</div>
+    <table id="schedule-table" style="display:none;">
+        <thead>
+            <tr>
+                <th>节次</th>
+                <th>周一</th>
+                <th>周二</th>
+                <th>周三</th>
+                <th>周四</th>
+                <th>周五</th>
+            </tr>
+        </thead>
+        <tbody id="schedule-body"></tbody>
+    </table>
+
+    <script src="js/api.js"></script>
+    <script>
+        (function() {
+            var name = sessionStorage.getItem('studentName') || '未知';
+            document.getElementById('schedule-title').textContent = name + ' 的课表';
+
+            var loadingEl = document.getElementById('loading-indicator');
+            var tableEl = document.getElementById('schedule-table');
+            var tbody = document.getElementById('schedule-body');
+            var modeBadge = document.getElementById('data-mode-badge');
+
+            function renderSchedule(courses) {
+                if (!courses || courses.length === 0) {
+                    loadingEl.textContent = '暂时没有已选课程';
+                    return;
+                }
+
+                var schedule = new Array(5);
+                for (var i = 0; i < 5; i++) schedule[i] = new Array(11).fill('');
+
+                courses.forEach(function(c) {
+                    var slots = c.time_slots || [];
+                    slots.forEach(function(slot) {
+                        var dayIdx = (slot.day_of_week || slot.day || 1) - 1;
+                        var periodIdx = slot.period - 1;
+                        if (dayIdx >= 0 && dayIdx < 5 && periodIdx >= 0 && periodIdx < 11) {
+                            var label = c.name + '<br><small>' + (c.teacher || '') + '</small>';
+                            if (schedule[dayIdx][periodIdx]) {
+                                schedule[dayIdx][periodIdx] += '<hr style="margin:2px 0">' + label;
+                            } else {
+                                schedule[dayIdx][periodIdx] = label;
+                            }
+                        }
+                    });
+                });
+
+                var periods = ['第1节','第2节','第3节','第4节','第5节','第6节','第7节','第8节','第9节','第10节','第11节'];
+                for (var p = 0; p < 11; p++) {
+                    var tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + periods[p] + '</td>';
+                    for (var d = 0; d < 5; d++) {
+                        var content = schedule[d][p] || '<span class="empty">-</span>';
+                        tr.innerHTML += '<td>' + content + '</td>';
+                    }
+                    tbody.appendChild(tr);
+                }
+
+                loadingEl.style.display = 'none';
+                tableEl.style.display = '';
+            }
+
+            // 优先使用 sessionStorage (兼容旧数据)
+            var savedData = sessionStorage.getItem('selectedCoursesData');
+            if (savedData) {
+                try {
+                    var courses = JSON.parse(savedData);
+                    modeBadge.textContent = '[sessionStorage]';
+                    renderSchedule(courses);
+                } catch(e) {
+                    // fall through to API
+                }
+            }
+
+            // 尝试从 API 加载
+            if (!savedData || CourseQSortAPI.getLoginMode() === 'jwt') {
+                loadingEl.textContent = '正在从服务器加载课表...';
+                CourseQSortAPI.student.getSchedule()
+                    .then(function(data) {
+                        modeBadge.textContent = CourseQSortAPI.isMockMode() ? '[预览模式]' : '[后端模式]';
+                        renderSchedule(data.courses || []);
+                    })
+                    .catch(function() {
+                        if (!savedData) {
+                            loadingEl.textContent = '加载失败，请返回选课页面重试';
+                        }
+                    });
+            }
+        })();
+    </script>
+</body>
+</html>

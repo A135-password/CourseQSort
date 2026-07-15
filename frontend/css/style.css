@@ -1,0 +1,98 @@
+/* ========================================
+   CourseQSort 选课系统 — 样式
+   ======================================== */
+
+/* 表格样式 */
+.table th, .table td { vertical-align: middle; }
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+
+/* 冲突行样式 */
+tr.conflict-row { opacity: 0.6; }
+tr.conflict-row td { background-color: #f8d7da !important; }
+.conflict-badge { cursor: pointer; }
+
+/* 空闲时段按钮 */
+.free-slot-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 2px;
+}
+
+/* 浮动冲突弹窗 */
+.conflict-popover-content {
+    background: white;
+    border: 1px solid #dc3545;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    max-width: 320px;
+    font-size: 13px;
+}
+.conflict-popover-content ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+}
+.conflict-popover-content li {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 4px 0;
+}
+.conflict-popover-content li:last-child { border-bottom: none; }
+
+/* 加载动画遮罩 */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.85);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 分页按钮 */
+#prev-page-btn:disabled, #next-page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 数据源标识 */
+#data-source-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+}
+
+/* 导航栏用户信息 */
+.navbar-text { font-size: 14px; }
+
+/* 选课操作按钮 */
+.select-btn { min-width: 60px; }
+
+/* 退课按钮 */
+.drop-btn {
+    line-height: 1;
+    font-size: 12px;
+}
+
+/* 已选课程列表滚动 */
+#selected-list { max-height: 300px; overflow-y: auto; }
+#selected-list ul { margin-bottom: 0; }
+
+/* 空闲时段区域滚动 */
+#free-slots-list { max-height: 350px; overflow-y: auto; }
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .col-md-9 { order: 2; }
+    .col-md-3 { order: 1; }
+    table { font-size: 12px; }
+    .table th, .table td { padding: 0.3rem; }
+}
+
+/* 课程名过长换行 */
+#course-list td:first-child { max-width: 150px; white-space: normal; word-break: break-all; }
