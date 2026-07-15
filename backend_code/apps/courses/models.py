@@ -61,6 +61,7 @@ class Course(models.Model):
     course_id_from_source = models.CharField(
         max_length=50, unique=True, verbose_name='来源系统 courseId'
     )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'course'
