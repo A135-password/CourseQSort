@@ -17,3 +17,7 @@ build/
 .env
 venv/
 .venv/
+/.vs/CourseQSort/FileContentIndex
+/.vs/CourseQSort/CopilotIndices/0.2.1653.9816
+/.vs/CourseQSort/v17
+/.vs
