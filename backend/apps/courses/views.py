@@ -50,7 +50,7 @@ class CourseViewSet(viewsets.ModelViewSet):
         return qs.select_related('major').prefetch_related('teachers')
 
 
-class TeacherViewSet(viewsets.ReadOnlyModelViewSet):
+class TeacherViewSet(viewsets.ModelViewSet):
     queryset = Teacher.objects.all().order_by('name')
     serializer_class = TeacherSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -89,6 +89,22 @@ class MajorViewSet(viewsets.ReadOnlyModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = StudentSerializer(students, many=True)
         return Response(serializer.data)
+
+
+class StudentViewSet(viewsets.ModelViewSet):
+    queryset = Student.objects.all().order_by('grade', 'student_no')
+    serializer_class = StudentSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        keyword = self.request.query_params.get('keyword')
+        if keyword:
+            qs = qs.filter(
+                Q(name__icontains=keyword) | Q(student_no__icontains=keyword)
+            )
+        return qs
 
 
 class CourseImportView(viewsets.ViewSet):

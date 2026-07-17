@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课表视图</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --cell-min-height: 82px;
+            --time-width: 72px;
+        }
+        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f5f7fa; }
+        .timetable-wrapper { overflow-x: auto; }
+        .timetable { border-collapse: collapse; width: 100%; min-width: 780px; table-layout: fixed; }
+        .timetable th, .timetable td { border: 1px solid #d0d5dd; text-align: center; vertical-align: middle; }
+        .timetable thead th { background: #f0f3f7; font-weight: 600; font-size: 14px; padding: 10px 0; color: #344054; }
+        .timetable thead th:first-child { width: var(--time-width); background: #e8ecf1; }
+        .timetable .time-col { background: #f8f9fb; font-size: 12px; color: #667085; font-weight: 500; width: var(--time-width); }
+        .timetable td { height: var(--cell-min-height); padding: 4px; position: relative; cursor: default; transition: background .15s; }
+        .timetable td:hover { background: #f9fafb; }
+        .course-block { display: block; border-radius: 6px; padding: 4px 5px; font-size: 11px; line-height: 1.35; color: #fff; text-align: left; margin: 1px 0; cursor: pointer; transition: transform .1s, box-shadow .1s; overflow: hidden; }
+        .course-block:hover { transform: scale(1.03); box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 5; position: relative; }
+        .course-block .c-name { font-weight: 600; font-size: 12px; }
+        .course-block .c-info { font-size: 10px; opacity: .85; }
+        .course-block.professional { background: linear-gradient(135deg, #4f7cff, #3b5fd9); }
+        .course-block.elective { background: linear-gradient(135deg, #f09b4a, #d4782c); }
+        .course-block.general { background: linear-gradient(135deg, #4cb782, #369b63); }
+        .course-block.pe { background: linear-gradient(135deg, #e06070, #c43d50); }
+        .legend-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 18px; font-size: 13px; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+        @media print {
+            body { background: #fff; }
+            #page-header, #page-footer { display: none; }
+            .timetable td { height: 50px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="page-header">
+    <nav class="navbar navbar-light bg-white border-bottom shadow-sm">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#"><i class="bi bi-table me-2"></i>课表视图</a>
+            <div class="d-flex align-items-center gap-3">
+                <!-- 周导航 -->
+                <div class="btn-group btn-group-sm" id="week-nav">
+                    <button class="btn btn-outline-secondary" id="week-prev" title="上一周"><i class="bi bi-chevron-left"></i></button>
+                    <select class="btn btn-outline-secondary" id="week-select" style="width:auto;"></select>
+                    <button class="btn btn-outline-secondary" id="week-next" title="下一周"><i class="bi bi-chevron-right"></i></button>
+                </div>
+                <span class="badge bg-info" id="week-info"></span>
+                <span class="text-muted small" id="page-subtitle"></span>
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> 打印</button>
+                <button class="btn btn-outline-primary btn-sm" id="back-btn"><i class="bi bi-arrow-left"></i> 返回</button>
+            </div>
+        </div>
+    </nav>
+</div>
+
+<div class="container my-4">
+    <!-- 图例 -->
+    <div class="d-flex flex-wrap align-items-center mb-3" id="legend-bar">
+        <span class="legend-item"><span class="legend-dot" style="background:#4f7cff;"></span> 专业课</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#f09b4a;"></span> 专业选修</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#4cb782;"></span> 通识课</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#e06070;"></span> 体育课</span>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="loading-msg" class="text-center py-5 text-muted">
+        <div class="spinner-border mb-2" style="width:2rem;height:2rem;"></div>
+        <p>正在加载课表数据...</p>
+    </div>
+
+    <!-- 课表 -->
+    <div class="card shadow-sm" id="timetable-card" style="display:none;">
+        <div class="card-body p-2 timetable-wrapper">
+            <table class="timetable" id="timetable-grid">
+                <thead>
+                    <tr>
+                        <th>节次</th>
+                        <th>周一</th><th>周二</th><th>周三</th><th>周四</th><th>周五</th>
+                    </tr>
+                </thead>
+                <tbody id="timetable-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div id="empty-msg" class="text-center py-5 text-muted" style="display:none;">
+        <i class="bi bi-calendar-x" style="font-size:3rem;"></i>
+        <p class="mt-2">暂无排课数据</p>
+    </div>
+</div>
+
+<div id="page-footer" class="text-center text-muted small pb-3">
+    CourseQSort 排课规划器 — 课表仅供参考
+</div>
+
+<script src="js/api.js"></script>
+<script>
+(function() {
+    // 从 localStorage 读取课表框架配置
+    function loadTimetableConfig(){
+        var raw = localStorage.getItem('timetableConfig');
+        if(raw){
+            try {
+                var tc = JSON.parse(raw);
+                if(tc && tc.periods && tc.periods.length>0) return tc;
+            } catch(e){}
+        }
+        // 默认 8 节课
+        return {periodsPerDay:8, periods:[
+            {name:'第1节',start:'08:00',end:'08:45'},{name:'第2节',start:'08:55',end:'09:40'},
+            {name:'第3节',start:'10:00',end:'10:45'},{name:'第4节',start:'10:55',end:'11:40'},
+            {name:'第5节',start:'14:00',end:'14:45'},{name:'第6节',start:'14:55',end:'15:40'},
+            {name:'第7节',start:'16:00',end:'16:45'},{name:'第8节',start:'16:55',end:'17:40'}
+        ]};
+    }
+    var TC = loadTimetableConfig();
+    var PERIODS = TC.periods;
+    var PERIOD_COUNT = PERIODS.length;
+
+    var params = new URLSearchParams(window.location.search);
+    var planId = params.get('plan');
+    var source = params.get('source');
+    var curWeek = parseInt(params.get('week')) || 1;
+    var allEntries = [];
+    var maxWeek = TC.totalWeeks || 18;
+
+    var backBtn = document.getElementById('back-btn');
+    if (source === 'admin') {
+        backBtn.addEventListener('click', function() { window.location.href = 'admin.html'; });
+    } else {
+        backBtn.addEventListener('click', function() { window.location.href = 'index.html'; });
+    }
+
+    var loadingEl = document.getElementById('loading-msg');
+    var cardEl = document.getElementById('timetable-card');
+    var emptyEl = document.getElementById('empty-msg');
+    var tbody = document.getElementById('timetable-body');
+    var subtitle = document.getElementById('page-subtitle');
+    var weekSelect = document.getElementById('week-select');
+    var weekInfo = document.getElementById('week-info');
+
+    function getCategoryClass(c) {
+        var name = (c.name || '').toLowerCase();
+        var isPro = c.is_professional_course || c.is_professional;
+        if (name.indexOf('体育') !== -1 || name.indexOf('运动') !== -1) return 'pe';
+        if (isPro === true) return 'professional';
+        if (isPro === false) return 'elective';
+        return 'professional';
+    }
+
+    function buildWeekSelector() {
+        weekSelect.innerHTML = '';
+        for (var w = 1; w <= maxWeek; w++) {
+            var opt = document.createElement('option');
+            opt.value = w;
+            opt.textContent = '第' + w + '周';
+            if (w === curWeek) opt.selected = true;
+            weekSelect.appendChild(opt);
+        }
+    }
+
+    function renderGrid() {
+        // 过滤当前周的条目
+        var weekEntries = allEntries.filter(function(e) {
+            return (e.week || 1) === curWeek;
+        });
+
+        if (!weekEntries.length) {
+            cardEl.style.display = 'none';
+            emptyEl.style.display = 'block';
+            emptyEl.innerHTML = '<i class="bi bi-calendar-x" style="font-size:3rem;"></i><p class="mt-2">第 ' + curWeek + ' 周暂无排课</p>';
+            weekInfo.textContent = curWeek + ' / ' + maxWeek + ' 周 · 0 节课';
+            return;
+        }
+
+        // 统计总课时
+        var totalSlots = weekEntries.length;
+
+        // 5 天 × PERIOD_COUNT 节
+        var grid = new Array(6);
+        for (var d = 1; d <= 5; d++) {
+            grid[d] = new Array(PERIOD_COUNT + 1);
+            for (var p = 1; p <= PERIOD_COUNT; p++) {
+                grid[d][p] = [];
+            }
+        }
+
+        // 按课程合并：同一课程同一天同一时段 = 一次（去重）
+        weekEntries.forEach(function(e) {
+            var d = e.day_of_week;
+            var p = e.period;
+            if (d >= 1 && d <= 5 && p >= 1 && p <= PERIOD_COUNT) {
+                // 检查是否已存在相同课程
+                var exists = grid[d][p].some(function(x) {
+                    return x.id === (e.course ? e.course.id : null);
+                });
+                if (!exists) {
+                    grid[d][p].push({
+                        id: e.course ? e.course.id : null,
+                        name: e.course ? e.course.name : '',
+                        teacher: e.teacher ? e.teacher.name : '',
+                        classroom: e.classroom ? e.classroom.name : '',
+                        credit: e.course ? (e.course.credit || '') : '',
+                        is_professional_course: e.course ? e.course.is_professional_course : true
+                    });
+                }
+            }
+        });
+
+        // 渲染
+        var html = '';
+        for (var p = 1; p <= PERIOD_COUNT; p++) {
+            var pd = PERIODS[p - 1]; var timeLabel = pd.name + '<br><small class="text-muted" style="font-size:10px;">' + pd.start + ' - ' + pd.end + '</small>';
+            html += '<tr><td class="time-col">' + timeLabel + '</td>';
+            for (var d = 1; d <= 5; d++) {
+                var cells = grid[d][p];
+                html += '<td>';
+                cells.forEach(function(c) {
+                    var cls = 'course-block ' + getCategoryClass(c);
+                    html += '<div class="' + cls + '" title="' + c.name + '&#10;教师: ' + (c.teacher || '未定') + '&#10;教室: ' + (c.classroom || '未定') + '">';
+                    html += '<div class="c-name">' + c.name + '</div>';
+                    if (c.teacher) html += '<div class="c-info">' + c.teacher + '</div>';
+                    if (c.classroom) html += '<div class="c-info">' + c.classroom + '</div>';
+                    html += '</div>';
+                });
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        tbody.innerHTML = html;
+        loadingEl.style.display = 'none';
+        cardEl.style.display = 'block';
+        emptyEl.style.display = 'none';
+        weekInfo.textContent = '第 ' + curWeek + ' 周 · ' + totalSlots + ' 课时';
+    }
+
+    function goWeek(w) {
+        if (w < 1 || w > maxWeek) return;
+        curWeek = w;
+        weekSelect.value = w;
+        renderGrid();
+    }
+
+    document.getElementById('week-prev').addEventListener('click', function() { goWeek(curWeek - 1); });
+    document.getElementById('week-next').addEventListener('click', function() { goWeek(curWeek + 1); });
+    weekSelect.addEventListener('change', function() { goWeek(parseInt(this.value)); });
+
+    // ---- 加载数据 ----
+    if (planId) {
+        subtitle.textContent = '方案 #' + planId;
+        CourseQSortAPI.admin.getSchedulePlan(parseInt(planId))
+            .then(function(plan) {
+                allEntries = plan.entries || [];
+                // 找出最大周数
+                var weeks = allEntries.map(function(e) { return e.week || 1; });
+                if (weeks.length > 0) {
+                    maxWeek = Math.max.apply(null, weeks);
+                }
+                buildWeekSelector();
+                goWeek(curWeek);
+            })
+            .catch(function() {
+                loadingEl.innerHTML = '<p class="text-danger">加载方案失败，请确认该方案存在</p>';
+            });
+    } else {
+        subtitle.textContent = '我的课表';
+        if (CourseQSortAPI.isMockMode()) {
+            CourseQSortAPI.student.getSchedule()
+                .then(function(data) {
+                    var courses = data.courses || [];
+                    // 转换为 entries 格式以便统一处理
+                    allEntries = [];
+                    courses.forEach(function(c) {
+                        var slots = c.time_slots || [];
+                        slots.forEach(function(s) {
+                            allEntries.push({
+                                week: 1,
+                                day_of_week: s.day_of_week || s.day || 1,
+                                period: s.period,
+                                course: { id: c.course_id || c.id, name: c.name, credit: c.credit, is_professional_course: true },
+                                teacher: { name: c.teacher || '' },
+                                classroom: { name: c.classroom || '' }
+                            });
+                        });
+                    });
+                    maxWeek = 1;
+                    buildWeekSelector();
+                    goWeek(1);
+                })
+                .catch(function() {
+                    loadingEl.innerHTML = '<p class="text-danger">加载失败</p>';
+                });
+        } else {
+            CourseQSortAPI.student.getSchedule()
+                .then(function(data) {
+                    var courses = data.courses || [];
+                    allEntries = [];
+                    courses.forEach(function(c) {
+                        var slots = c.time_slots || [];
+                        slots.forEach(function(s) {
+                            allEntries.push({
+                                week: 1,
+                                day_of_week: s.day_of_week || s.day || 1,
+                                period: s.period,
+                                course: { id: c.course_id || c.id, name: c.name, credit: c.credit, is_professional_course: true },
+                                teacher: { name: c.teacher || '' },
+                                classroom: { name: c.classroom || '' }
+                            });
+                        });
+                    });
+                    maxWeek = 1;
+                    buildWeekSelector();
+                    goWeek(1);
+                })
+                .catch(function() {
+                    loadingEl.innerHTML = '<p class="text-danger">无法连接后端</p>';
+                });
+        }
+    }
+})();
+</script>
+</body>
+</html>

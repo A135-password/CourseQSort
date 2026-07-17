@@ -4,7 +4,9 @@ from django.db import models
 
 class Profile(models.Model):
     ROLE_CHOICES = [
+        ('MANAGER', '管理员'),
         ('ADMIN', '教务'),
+        ('TEACHER', '教师'),
         ('STUDENT', '学生'),
     ]
 

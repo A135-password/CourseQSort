@@ -67,7 +67,7 @@ class TaskStatusView(viewsets.ViewSet):
         return Response(data)
 
 
-class PlanViewSet(viewsets.ReadOnlyModelViewSet):
+class PlanViewSet(viewsets.ModelViewSet):
     queryset = SchedulePlan.objects.all()
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = PageNumberPagination
@@ -84,6 +84,11 @@ class PlanViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.prefetch_related(
             'entries__course', 'entries__teacher', 'entries__classroom'
         )
+
+    def destroy(self, request, *args, **kwargs):
+        plan = self.get_object()
+        plan.delete()
+        return Response({'detail': '方案已删除'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'])
     def evaluation(self, request, pk=None):

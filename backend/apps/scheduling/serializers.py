@@ -29,7 +29,7 @@ class ScheduleEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = ScheduleEntry
         fields = ['id', 'course', 'teacher', 'classroom',
-                  'day_of_week', 'period', 'student_group_ids']
+                  'day_of_week', 'period', 'week', 'student_group_ids']
 
 
 class SchedulePlanListSerializer(serializers.ModelSerializer):

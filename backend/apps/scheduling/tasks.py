@@ -1,8 +1,26 @@
-from apps.scheduling.models import TaskRecord, ScheduleEntry
-from apps.courses.models import CourseScheduleItem
+"""
+排课异步任务模块。
+
+负责：
+1. 从数据库加载数据（课程、教室、教师、保护时段）
+2. 调用遗传算法优化器生成排课方案
+3. 更新任务状态和进度
+"""
+
+from apps.scheduling.models import TaskRecord
+from apps.scheduling.algorithm import run as run_optimizer
 
 
 def run_generate_sync(task_id):
+    """
+    同步执行排课生成（由 view 直接调用，不依赖 Celery）。
+
+    流程：
+    1. 获取任务和关联的方案
+    2. 标记任务为 RUNNING
+    3. 调用优化器
+    4. 更新任务状态为 SUCCESS 或 FAILED
+    """
     try:
         task = TaskRecord.objects.get(task_id=task_id)
     except TaskRecord.DoesNotExist:
@@ -15,42 +33,36 @@ def run_generate_sync(task_id):
     try:
         plan = task.plan
         if not plan:
-            raise ValueError('No plan associated with task')
+            raise ValueError('任务没有关联排课方案')
 
-        task.progress = 0.3
-        task.current_generation = 100
-        task.best_fitness = 0.0
-        task.estimated_time_remaining = '120s'
-        task.save(update_fields=['progress', 'current_generation',
-                                  'best_fitness', 'estimated_time_remaining'])
+        # 进度回调
+        def on_progress(progress, generation, best_fitness):
+            task.progress = float(progress)
+            task.current_generation = generation
+            task.best_fitness = float(best_fitness)
+            task.estimated_time_remaining = ''
+            task.save(update_fields=[
+                'progress', 'current_generation',
+                'best_fitness', 'estimated_time_remaining'
+            ])
 
-        schedule_items = CourseScheduleItem.objects.filter(
-            course__semester=plan.semester
-        ).select_related('course', 'teacher', 'classroom')
+        # 执行优化算法
+        entry_count, best_fitness, stats = run_optimizer(plan, on_progress)
 
-        entries = []
-        for item in schedule_items:
-            entries.append(ScheduleEntry(
-                plan=plan,
-                course=item.course,
-                teacher=item.teacher,
-                classroom=item.classroom,
-                day_of_week=item.day_of_week,
-                period=item.period,
-            ))
-        ScheduleEntry.objects.bulk_create(entries, ignore_conflicts=True)
-
-        fitness = min(1.0, len(entries) / 10 * 0.1 + 0.5) if entries else 0.5
-        plan.overall_fitness = round(fitness, 2)
+        # 更新方案评分
+        plan.overall_fitness = round(float(best_fitness), 4)
         plan.save(update_fields=['overall_fitness'])
 
+        # 更新任务为成功
         task.status = 'SUCCESS'
         task.progress = 1.0
-        task.current_generation = 500
-        task.best_fitness = plan.overall_fitness
+        task.current_generation = stats.get('generations', stats.get('total_entries', 0))
+        task.best_fitness = round(float(best_fitness), 4)
         task.estimated_time_remaining = ''
-        task.save(update_fields=['status', 'progress', 'current_generation',
-                                  'best_fitness', 'estimated_time_remaining'])
+        task.save(update_fields=[
+            'status', 'progress', 'current_generation',
+            'best_fitness', 'estimated_time_remaining'
+        ])
 
     except Exception as e:
         task.status = 'FAILED'

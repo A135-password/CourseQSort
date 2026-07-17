@@ -69,14 +69,21 @@
                     </div>
                     <input type="text" class="form-control form-control-sm mb-2" id="course-search" placeholder="搜索课程名称或编号..." style="max-width:300px;">
                     <div class="table-responsive"><table class="table table-hover table-sm"><thead><tr><th>名称</th><th>编号</th><th>学分</th><th>教师</th><th>专业</th><th>容量</th><th>类别</th><th>操作</th></tr></thead><tbody id="admin-course-list"></tbody></table></div>
-                    <nav><ul class="pagination pagination-sm" id="admin-course-pagination"></ul></nav>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted" id="admin-course-pagination-info"></small>
+                        <nav><ul class="pagination pagination-sm mb-0" id="admin-course-pagination"></ul></nav>
+                    </div>
                 </div>
 
                 <!-- 基础资源 -->
                 <div class="admin-section d-none" id="section-resources">
-                    <h4 class="mb-3">基础资源</h4>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h4 class="mb-0">基础资源</h4>
+                        <button class="btn btn-primary btn-sm d-none" id="resource-add-btn">新增</button>
+                    </div>
                     <ul class="nav nav-tabs mb-3" id="resource-tabs">
                         <li class="nav-item"><a class="nav-link active" data-resource="teachers" href="#">教师</a></li>
+                        <li class="nav-item"><a class="nav-link" data-resource="students" href="#">学生</a></li>
                         <li class="nav-item"><a class="nav-link" data-resource="classrooms" href="#">教室</a></li>
                         <li class="nav-item"><a class="nav-link" data-resource="majors" href="#">专业</a></li>
                     </ul>
@@ -142,6 +149,44 @@
         <div class="modal-header"><h5 class="modal-title">编辑时段</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body" id="slot-modal-body"></div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" id="slot-modal-save">保存</button></div>
+    </div></div></div>
+
+    <!-- 教师禁排时段编辑弹窗 -->
+    <div class="modal fade" id="teacher-slot-modal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header bg-warning-subtle"><h5 class="modal-title" id="teacher-slot-modal-title">编辑教师禁排时段</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="teacher-slot-modal-body"></div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="teacher-slot-clear-all">全部清除</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-warning" id="teacher-slot-modal-save">保存禁排时段</button>
+        </div>
+    </div></div></div>
+
+    <!-- 教师信息编辑弹窗（新增/编辑） -->
+    <div class="modal fade" id="teacher-edit-modal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="teacher-edit-modal-title">编辑教师信息</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="teacher-edit-modal-body"></div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="teacher-edit-modal-save">保存</button>
+        </div>
+    </div></div></div>
+
+    <!-- 学生信息编辑弹窗 -->
+    <div class="modal fade" id="student-edit-modal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="student-edit-modal-title">编辑学生信息</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="student-edit-id">
+            <div class="mb-2"><label class="form-label small">姓名 <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="student-edit-name" placeholder="真实姓名" required></div>
+            <div class="mb-2"><label class="form-label small">学号 <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="student-edit-no" placeholder="如 2024001" required></div>
+            <div class="mb-2"><label class="form-label small">专业</label><select class="form-select form-select-sm" id="student-edit-major"></select></div>
+            <div class="mb-2"><label class="form-label small">年级</label><input type="text" class="form-control form-control-sm" id="student-edit-grade" placeholder="如 2024"></div>
+            <div class="mb-2"><label class="form-label small">班级</label><input type="text" class="form-control form-control-sm" id="student-edit-class" placeholder="如 计科2401"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="student-edit-modal-save">保存</button>
+        </div>
     </div></div></div>
 
     <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.min.js"></script>
