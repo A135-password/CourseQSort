@@ -1,0 +1,23 @@
+# SQLite database files
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+venv/
+.venv/
+/.vs/CourseQSort/FileContentIndex
+/.vs/CourseQSort/CopilotIndices/0.2.1653.9816
+/.vs/CourseQSort/v17
+/.vs
