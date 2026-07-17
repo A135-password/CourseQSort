@@ -172,6 +172,38 @@
         </div>
     </div></div></div>
 
+    <!-- 课室编辑弹窗 -->
+    <div class="modal fade" id="classroom-edit-modal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="classroom-edit-modal-title">编辑课室</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="classroom-edit-id">
+            <div class="mb-2"><label class="form-label small">名称 <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="classroom-edit-name" placeholder="如 A101"></div>
+            <div class="mb-2"><label class="form-label small">容量</label><input type="number" class="form-control form-control-sm" id="classroom-edit-capacity" value="60" min="1"></div>
+            <div class="mb-2"><label class="form-label small">楼宇</label><input type="text" class="form-control form-control-sm" id="classroom-edit-building" placeholder="如 教学楼A"></div>
+            <div class="mb-2"><label class="form-label small">设备</label><input type="text" class="form-control form-control-sm" id="classroom-edit-equipment" placeholder="多媒体, 黑板（逗号分隔）"></div>
+            <div class="mb-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="classroom-edit-islab"><label class="form-check-label small">实验室</label></div></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="classroom-edit-modal-save">保存</button>
+        </div>
+    </div></div></div>
+
+    <!-- 专业编辑弹窗 -->
+    <div class="modal fade" id="major-edit-modal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="major-edit-modal-title">编辑专业</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="major-edit-id">
+            <div class="mb-2"><label class="form-label small">名称 <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="major-edit-name" placeholder="如 计算机科学与技术"></div>
+            <div class="mb-2"><label class="form-label small">编号</label><input type="text" class="form-control form-control-sm" id="major-edit-code" placeholder="如 CS"></div>
+            <div class="mb-2"><label class="form-label small">学生数</label><input type="number" class="form-control form-control-sm" id="major-edit-count" value="0" min="0"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="major-edit-modal-save">保存</button>
+        </div>
+    </div></div></div>
+
     <!-- 学生信息编辑弹窗 -->
     <div class="modal fade" id="student-edit-modal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="student-edit-modal-title">编辑学生信息</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>

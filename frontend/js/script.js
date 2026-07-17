@@ -45,6 +45,7 @@ var pageSize = 20;
 var totalCourseCount = 0;
 var maxCredits = 25;
 var isDataLoading = false;
+var selectedFreeSlot = null;  // {day_of_week, period} 当前高亮的空闲时段
 
 // ======================== 加载控制 ========================
 
@@ -326,6 +327,10 @@ function renderFreeSlots() {
     freeSlots.forEach(function (slot) {
         var btn = document.createElement('button');
         btn.className = 'btn btn-outline-info btn-sm free-slot-btn';
+        // 高亮当前选中的时段
+        if (selectedFreeSlot && selectedFreeSlot.day_of_week === slot.day_of_week && selectedFreeSlot.period === slot.period) {
+            btn.classList.add('active-slot');
+        }
         btn.textContent = '周' + ['一', '二', '三', '四', '五'][slot.day_of_week - 1] + ' 第' + slot.period + '节';
         btn.addEventListener('click', function () {
             filterByFreeSlot(slot.day_of_week, slot.period);
@@ -337,7 +342,8 @@ function renderFreeSlots() {
     showAllBtn.className = 'btn btn-outline-secondary btn-sm w-100 mt-2';
     showAllBtn.textContent = '显示全部课程';
     showAllBtn.addEventListener('click', function () {
-        loadCoursePage(1).then(function () { renderCourseList(currentCourses); });
+        selectedFreeSlot = null;
+        loadCoursePage(1).then(function () { renderCourseList(currentCourses); renderFreeSlots(); });
     });
     freeSlotsContainer.appendChild(showAllBtn);
 }
@@ -403,6 +409,14 @@ async function handleDropCourse(courseId) {
 }
 
 async function filterByFreeSlot(day, period) {
+    // 切换选中：如果点击已选中的时段，取消筛选
+    if (selectedFreeSlot && selectedFreeSlot.day_of_week === day && selectedFreeSlot.period === period) {
+        selectedFreeSlot = null;
+        loadCoursePage(1).then(function () { renderCourseList(currentCourses); renderFreeSlots(); });
+        return;
+    }
+    selectedFreeSlot = { day_of_week: day, period: period };
+    renderFreeSlots();
     showLoading('正在加载推荐课程...');
     try {
         var data = await CourseQSortAPI.student.getFreeSlotRecommendations(day, period);

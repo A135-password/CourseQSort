@@ -55,6 +55,7 @@ class CourseListSerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'credit', 'hours',
             'major', 'teachers', 'required_classroom_types',
             'expected_student_count', 'is_professional_course',
+            'session_length',
         ]
 
 
@@ -69,6 +70,7 @@ class CourseDetailSerializer(serializers.ModelSerializer):
             'major', 'teachers', 'required_classroom_types',
             'expected_student_count', 'is_professional_course',
             'prerequisites', 'semester', 'created_at',
+            'session_length',
         ]
 
 
@@ -84,6 +86,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
             'name', 'code', 'credit', 'hours', 'semester',
             'major_id', 'teacher_ids', 'required_classroom_types',
             'expected_student_count', 'is_professional_course',
+            'session_length',
         ]
 
     def create(self, validated_data):

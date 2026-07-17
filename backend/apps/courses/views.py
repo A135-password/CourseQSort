@@ -66,14 +66,14 @@ class TeacherViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class ClassroomViewSet(viewsets.ReadOnlyModelViewSet):
+class ClassroomViewSet(viewsets.ModelViewSet):
     queryset = Classroom.objects.all().order_by('building', 'name')
     serializer_class = ClassroomSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = PageNumberPagination
 
 
-class MajorViewSet(viewsets.ReadOnlyModelViewSet):
+class MajorViewSet(viewsets.ModelViewSet):
     queryset = Major.objects.all().order_by('name')
     serializer_class = MajorSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]

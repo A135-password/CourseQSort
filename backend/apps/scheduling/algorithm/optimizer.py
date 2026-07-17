@@ -47,11 +47,10 @@ def run(plan, progress_callback=None):
 
     ScheduleEntry.objects.filter(plan=plan).delete()
 
-    # Track progress stages
     if progress_callback:
         progress_callback(0.1, 0, 0.0)
 
-    # Strategy 1: Import from CourseScheduleItem
+    # 策略1：从 CourseScheduleItem 直接导入
     source_items = list(CourseScheduleItem.objects.filter(
         course__semester=semester
     ).select_related('course', 'teacher', 'classroom'))
@@ -91,7 +90,7 @@ def run(plan, progress_callback=None):
             'message': 'direct import from source data'
         }
 
-    # Strategy 2: Genetic algorithm
+    # 策略2：遗传算法
     if progress_callback:
         progress_callback(0.2, 0, 0.0)
 

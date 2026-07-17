@@ -67,6 +67,9 @@ function openCourseEditModal(course) {
         h += '<div class="col-md-4"><label class="form-label small">容量</label><input type="number" class="form-control form-control-sm" id="c-capacity" value="' + (course ? (course.expected_student_count||100) : 100) + '"></div>';
         h += '</div>';
         h += '<div class="row g-2 mb-2">';
+        h += '<div class="col-md-4"><label class="form-label small">连排节数 <small class="text-muted">(每次课占几节)</small></label><input type="number" class="form-control form-control-sm" id="c-session-length" value="' + (course ? (course.session_length||2) : 2) + '" min="1" max="6"></div>';
+        h += '</div>';
+        h += '<div class="row g-2 mb-2">';
         h += '<div class="col-md-6"><label class="form-label small">专业</label><select class="form-select form-select-sm" id="c-major"><option value="">-- 无 --</option>';
         for (var i = 0; i < majors.length; i++) {
             var sel = (majors[i].id === curMajorId) ? ' selected' : '';
@@ -97,6 +100,7 @@ function openCourseEditModal(course) {
             '<div class="mb-2"><label class="form-label small">编号</label><input class="form-control form-control-sm" id="c-code" value="' + (course ? (course.code||'') : '') + '"></div>' +
             '<div class="row g-2 mb-2"><div class="col-6"><label class="form-label small">学分</label><input type="number" class="form-control form-control-sm" id="c-credit" value="' + (course ? (course.credit||0) : 3) + '"></div><div class="col-6"><label class="form-label small">学时</label><input type="number" class="form-control form-control-sm" id="c-hours" value="' + (course ? (course.hours||48) : 48) + '"></div></div>' +
             '<div class="mb-2"><label class="form-label small">容量</label><input type="number" class="form-control form-control-sm" id="c-capacity" value="' + (course ? (course.expected_student_count||100) : 100) + '"></div>' +
+            '<div class="mb-2"><label class="form-label small">连排节数</label><input type="number" class="form-control form-control-sm" id="c-session-length" value="' + (course ? (course.session_length||2) : 2) + '" min="1" max="6"></div>' +
             '<div class="mb-2"><label class="form-label small">学期</label><input class="form-control form-control-sm" id="c-semester" value="' + (course ? (course.semester||'') : '2026-spring') + '"></div>' +
             '<div class="mb-2"><label class="form-label small">课程类别</label><select class="form-select form-select-sm" id="c-is-professional"><option value="1"' + (course && !course.is_professional_course ? '' : ' selected') + '>专业课程</option><option value="0"' + (course && !course.is_professional_course ? ' selected' : '') + '>通识课程</option></select></div>';
     });
@@ -127,6 +131,7 @@ document.getElementById('course-modal-save').addEventListener('click', async fun
         teacher_ids: teacherIds,
         expected_student_count: parseInt(document.getElementById('c-capacity').value) || 100,
         is_professional_course: isProfEl ? (isProfEl.value === '1') : true,
+        session_length: parseInt(document.getElementById('c-session-length').value) || 2,
     };
     try {
         if (_editingCourseId) {
@@ -263,6 +268,90 @@ async function deleteStudent(sid, sname){
     catch(e) { alert('删除失败: ' + (e.message || '网络错误')); }
 }
 
+// ---- 课室编辑弹窗 ----
+function openClassroomEditModal(room){
+    var title = document.getElementById('classroom-edit-modal-title');
+    if(room){
+        title.textContent = '编辑课室';
+        document.getElementById('classroom-edit-id').value = room.id;
+        document.getElementById('classroom-edit-name').value = room.name || '';
+        document.getElementById('classroom-edit-capacity').value = room.capacity || 60;
+        document.getElementById('classroom-edit-building').value = room.building || '';
+        document.getElementById('classroom-edit-equipment').value = (room.equipment_types||[]).join(', ');
+        document.getElementById('classroom-edit-islab').checked = room.is_lab || false;
+    } else {
+        title.textContent = '新增课室';
+        document.getElementById('classroom-edit-id').value = '';
+        document.getElementById('classroom-edit-name').value = '';
+        document.getElementById('classroom-edit-capacity').value = '60';
+        document.getElementById('classroom-edit-building').value = '';
+        document.getElementById('classroom-edit-equipment').value = '';
+        document.getElementById('classroom-edit-islab').checked = false;
+    }
+    new bootstrap.Modal(document.getElementById('classroom-edit-modal')).show();
+}
+document.getElementById('classroom-edit-modal-save').addEventListener('click', async function(){
+    var id = document.getElementById('classroom-edit-id').value;
+    var data = {
+        name: document.getElementById('classroom-edit-name').value.trim(),
+        capacity: parseInt(document.getElementById('classroom-edit-capacity').value) || 60,
+        building: document.getElementById('classroom-edit-building').value.trim(),
+        equipment_types: document.getElementById('classroom-edit-equipment').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
+        is_lab: document.getElementById('classroom-edit-islab').checked
+    };
+    if(!data.name){ alert('请输入课室名称'); return; }
+    try {
+        if(id){ await CourseQSortAPI.admin.updateClassroom(parseInt(id), data); }
+        else { await CourseQSortAPI.admin.createClassroom(data); }
+        bootstrap.Modal.getInstance(document.getElementById('classroom-edit-modal')).hide();
+        loadResTable();
+    } catch(e) { alert('保存失败: ' + (e.message || '网络错误')); }
+});
+async function deleteClassroom(rid, rname){
+    if(!confirm('确定要删除课室「' + rname + '」吗？此操作不可恢复。')) return;
+    try { await CourseQSortAPI.admin.deleteClassroom(rid); loadResTable(); }
+    catch(e) { alert('删除失败: ' + (e.message || '网络错误')); }
+}
+
+// ---- 专业编辑弹窗 ----
+function openMajorEditModal(major){
+    var title = document.getElementById('major-edit-modal-title');
+    if(major){
+        title.textContent = '编辑专业';
+        document.getElementById('major-edit-id').value = major.id;
+        document.getElementById('major-edit-name').value = major.name || '';
+        document.getElementById('major-edit-code').value = major.code || '';
+        document.getElementById('major-edit-count').value = major.student_count || 0;
+    } else {
+        title.textContent = '新增专业';
+        document.getElementById('major-edit-id').value = '';
+        document.getElementById('major-edit-name').value = '';
+        document.getElementById('major-edit-code').value = '';
+        document.getElementById('major-edit-count').value = '0';
+    }
+    new bootstrap.Modal(document.getElementById('major-edit-modal')).show();
+}
+document.getElementById('major-edit-modal-save').addEventListener('click', async function(){
+    var id = document.getElementById('major-edit-id').value;
+    var data = {
+        name: document.getElementById('major-edit-name').value.trim(),
+        code: document.getElementById('major-edit-code').value.trim(),
+        student_count: parseInt(document.getElementById('major-edit-count').value) || 0
+    };
+    if(!data.name){ alert('请输入专业名称'); return; }
+    try {
+        if(id){ await CourseQSortAPI.admin.updateMajor(parseInt(id), data); }
+        else { await CourseQSortAPI.admin.createMajor(data); }
+        bootstrap.Modal.getInstance(document.getElementById('major-edit-modal')).hide();
+        loadResTable();
+    } catch(e) { alert('保存失败: ' + (e.message || '网络错误')); }
+});
+async function deleteMajor(mid, mname){
+    if(!confirm('确定要删除专业「' + mname + '」吗？此操作不可恢复。')) return;
+    try { await CourseQSortAPI.admin.deleteMajor(mid); loadResTable(); }
+    catch(e) { alert('删除失败: ' + (e.message || '网络错误')); }
+}
+
 async function loadResTable(){
     var tb = document.getElementById('resource-table-body');
     var addBtn = document.getElementById('resource-add-btn');
@@ -317,22 +406,53 @@ async function loadResTable(){
                     deleteStudent(parseInt(this.getAttribute('data-sid')), this.getAttribute('data-sname'));
                 });
             });
-	        } else {
-            addBtn.classList.add('d-none');
-            if(curRes==='classrooms'){
-                var d = await CourseQSortAPI.admin.getClassrooms();
-                var items = d.results || [];
-                tb.innerHTML = '<tr><th>名称</th><th>容量</th><th>楼宇</th><th>设备</th><th>类型</th></tr>' + items.map(function(r){
-                    return '<tr><td>' + r.name + '</td><td>' + r.capacity + '</td><td>' + (r.building||'-') +
-                        '</td><td class="small">' + (r.equipment_types||[]).join(', ') + '</td><td>' + (r.is_lab?'实验室':'普通') + '</td></tr>';
-                }).join('') || '<tr><td colspan="5" class="text-muted">暂无数据</td></tr>';
-            } else {
-                var d = await CourseQSortAPI.admin.getMajors();
-                var items = d.results || [];
-                tb.innerHTML = '<tr><th>名称</th><th>编号</th><th>学生数</th></tr>' + items.map(function(m){
-                    return '<tr><td>' + m.name + '</td><td>' + (m.code||'-') + '</td><td>' + (m.student_count||0) + '</td></tr>';
-                }).join('') || '<tr><td colspan="3" class="text-muted">暂无数据</td></tr>';
-            }
+	        } else if(curRes==='classrooms'){
+            addBtn.classList.remove('d-none');
+            addBtn.textContent = '新增课室';
+            addBtn.onclick = function(){ openClassroomEditModal(null); };
+            var d = await CourseQSortAPI.admin.getClassrooms();
+            var items = d.results || [];
+            tb.innerHTML = '<tr><th>名称</th><th>容量</th><th>楼宇</th><th>设备</th><th>类型</th><th>操作</th></tr>' + items.map(function(r){
+                return '<tr><td>' + r.name + '</td><td>' + r.capacity + '</td><td>' + (r.building||'-') +
+                    '</td><td class="small">' + (r.equipment_types||[]).join(', ') + '</td><td>' + (r.is_lab?'实验室':'普通') +
+                    '</td><td><button class="btn btn-outline-primary btn-sm py-0 me-1 edit-room-btn" data-rid="' + r.id + '">编辑</button>' +
+                    '<button class="btn btn-outline-danger btn-sm py-0 del-room-btn" data-rid="' + r.id + '" data-rname="' + r.name + '">删除</button></td></tr>';
+            }).join('') || '<tr><td colspan="6" class="text-muted">暂无课室数据，点击右上角「新增课室」录入</td></tr>';
+            document.querySelectorAll('.edit-room-btn').forEach(function(b){
+                b.addEventListener('click', function(){
+                    var rid = parseInt(this.getAttribute('data-rid'));
+                    var room = items.find(function(r){return r.id===rid;});
+                    if(room) openClassroomEditModal(room);
+                });
+            });
+            document.querySelectorAll('.del-room-btn').forEach(function(b){
+                b.addEventListener('click', function(){
+                    deleteClassroom(parseInt(this.getAttribute('data-rid')), this.getAttribute('data-rname'));
+                });
+            });
+        } else {
+            addBtn.classList.remove('d-none');
+            addBtn.textContent = '新增专业';
+            addBtn.onclick = function(){ openMajorEditModal(null); };
+            var d = await CourseQSortAPI.admin.getMajors();
+            var items = d.results || [];
+            tb.innerHTML = '<tr><th>名称</th><th>编号</th><th>学生数</th><th>操作</th></tr>' + items.map(function(m){
+                return '<tr><td>' + m.name + '</td><td>' + (m.code||'-') + '</td><td>' + (m.student_count||0) +
+                    '</td><td><button class="btn btn-outline-primary btn-sm py-0 me-1 edit-major-btn" data-mid="' + m.id + '">编辑</button>' +
+                    '<button class="btn btn-outline-danger btn-sm py-0 del-major-btn" data-mid="' + m.id + '" data-mname="' + m.name + '">删除</button></td></tr>';
+            }).join('') || '<tr><td colspan="4" class="text-muted">暂无专业数据，点击右上角「新增专业」录入</td></tr>';
+            document.querySelectorAll('.edit-major-btn').forEach(function(b){
+                b.addEventListener('click', function(){
+                    var mid = parseInt(this.getAttribute('data-mid'));
+                    var major = items.find(function(m){return m.id===mid;});
+                    if(major) openMajorEditModal(major);
+                });
+            });
+            document.querySelectorAll('.del-major-btn').forEach(function(b){
+                b.addEventListener('click', function(){
+                    deleteMajor(parseInt(this.getAttribute('data-mid')), this.getAttribute('data-mname'));
+                });
+            });
         }
     } catch(e) { tb.innerHTML = '<tr><td colspan="5" class="text-danger">加载失败: ' + e.message + '</td></tr>'; }
 }
@@ -341,7 +461,7 @@ document.getElementById('protected-add-btn').addEventListener('click',function()
 document.getElementById('slot-modal-save').addEventListener('click',async function(){var data={day_of_week:parseInt(document.getElementById('s-day').value),start_period:parseInt(document.getElementById('s-start').value),end_period:parseInt(document.getElementById('s-end').value),penalty_weight:parseFloat(document.getElementById('s-weight').value),description:document.getElementById('s-desc').value||''};await CourseQSortAPI.admin.addProtectedSlot(data);bootstrap.Modal.getInstance(document.getElementById('slot-modal')).hide();loadSlots();});
 document.getElementById('protected-batch-btn').addEventListener('click',function(){alert('批量更新：将替换所有保护时段（模拟）');});
 async function loadPlans(){try{var d=await CourseQSortAPI.admin.getSchedulePlans();var plans=d.results||[];var tb=document.getElementById('schedule-plans-list');var SM={DRAFT:'草稿',PUBLISHED:'已发布',GENERATING:'生成中'};tb.innerHTML=plans.map(function(p){var vb='<a class="btn btn-outline-primary btn-sm py-0 me-1" href="timetable.html?plan='+p.id+'&source=admin" target="_blank">课表</a>';var eb='<button class="btn btn-outline-info btn-sm py-0 eval-plan" data-id="'+p.id+'">评估</button>';var pb=p.status==='DRAFT'?' <button class="btn btn-outline-success btn-sm py-0 pub-plan" data-id="'+p.id+'">发布</button>':'';var db='<button class="btn btn-outline-danger btn-sm py-0 ms-1 del-plan" data-pid="'+p.id+'" data-pname="'+p.plan_name+'">删除</button>';return'<tr><td>'+p.plan_name+'</td><td>'+p.semester+'</td><td><span class="badge bg-'+(p.status==='PUBLISHED'?'success':'secondary')+'">'+(SM[p.status]||p.status)+'</span></td><td>'+(p.overall_fitness!=null?p.overall_fitness:'-')+'</td><td class="small">'+(p.created_at?p.created_at.replace('T',' ').slice(0,16):'-')+'</td><td>'+vb+eb+pb+db+'</td></tr>';}).join('')||'<tr><td colspan="6" class="text-muted">暂无方案</td></tr>';document.querySelectorAll('.eval-plan').forEach(function(b){b.addEventListener('click',async function(){var id=parseInt(this.getAttribute('data-id'));try{var e=await CourseQSortAPI.admin.getSchedulePlanEvaluation(id);alert('方案评估:\n总体适应度: '+e.overall_fitness+'\n课时方差: '+e.daily_hour_variance+'\n每日分布: '+(e.daily_distribution||[]).join(', ')+'\n保护时段占用: '+e.protected_slot_occupied);}catch(ex){alert('加载评估失败');}});});document.querySelectorAll('.pub-plan').forEach(function(b){b.addEventListener('click',async function(){var id=parseInt(this.getAttribute('data-id'));await CourseQSortAPI.admin.publishPlan(id);loadPlans();});});document.querySelectorAll('.del-plan').forEach(function(b){b.addEventListener('click',async function(){var pid=parseInt(this.getAttribute('data-pid'));var pname=this.getAttribute('data-pname');if(!confirm('确定要删除方案「'+pname+'」吗？此操作不可恢复。')) return;try{await CourseQSortAPI.admin.deleteSchedulePlan(pid);loadPlans();}catch(e){alert('删除失败: '+(e.message||'网络错误'));}});});}catch(e){}}
-document.getElementById('schedule-generate-btn').addEventListener('click',async function(){var el=document.getElementById('schedule-task-status');el.className='alert alert-info';el.textContent='正在生成排课方案...';try{var r=await CourseQSortAPI.admin.generateSchedule({plan_name:'新方案-'+new Date().toLocaleString(),semester:'2026-spring',major_ids:[],algorithm_config:{timetable_periods:(getTimetableConfig().periods||[]).length,total_weeks:getTimetableConfig().totalWeeks||18,session_length:getTimetableConfig().sessionLength||2,period_times:getTimetableConfig().periods||[]}});if(r.status==='SUCCESS'||r.status==='PENDING'){el.className='alert alert-success';el.textContent='方案生成完成！';loadPlans();}else{el.className='alert alert-warning';el.textContent='生成完成，但状态: '+(r.status||'未知');loadPlans();}}catch(e){el.className='alert alert-danger';el.textContent='生成失败: '+(e.message||'网络错误');}});
+document.getElementById('schedule-generate-btn').addEventListener('click',async function(){var el=document.getElementById('schedule-task-status');el.className='alert alert-info';el.textContent='正在生成排课方案...';try{var r=await CourseQSortAPI.admin.generateSchedule({plan_name:'新方案-'+new Date().toLocaleString(),semester:'2026-spring',major_ids:[],algorithm_config:{timetable_periods:(getTimetableConfig().periods||[]).length,total_weeks:getTimetableConfig().totalWeeks||18,session_length:2,period_times:getTimetableConfig().periods||[]}});if(r.status==='SUCCESS'||r.status==='PENDING'){el.className='alert alert-success';el.textContent='方案生成完成！';loadPlans();}else{el.className='alert alert-warning';el.textContent='生成完成，但状态: '+(r.status||'未知');loadPlans();}}catch(e){el.className='alert alert-danger';el.textContent='生成失败: '+(e.message||'网络错误');}});
 async function loadConflict(){try{var d=await CourseQSortAPI.admin.getConflictResults();var rs=d.results||[];var tb=document.getElementById('conflict-results-list');tb.innerHTML=rs.map(function(r){return'<tr><td>'+r.id+'</td><td>'+r.semester+'</td><td>'+r.course_count+'</td><td>'+r.conflict_pairs_count+'</td><td>'+r.threshold+'</td><td class="small">'+(r.created_at?r.created_at.replace('T',' ').slice(0,16):'-')+'</td><td><button class="btn btn-outline-danger btn-sm py-0 view-pairs" data-id="'+r.id+'">查看冲突对</button></td></tr>';}).join('')||'<tr><td colspan="7" class="text-muted">暂无结果</td></tr>';document.querySelectorAll('.view-pairs').forEach(function(b){b.addEventListener('click',async function(){var id=parseInt(this.getAttribute('data-id'));try{var pd=await CourseQSortAPI.admin.getConflictPairs(id);var pairs=pd.results||[];var area=document.getElementById('conflict-chart-area');area.innerHTML='<h6>冲突课程对</h6>'+pairs.map(function(p){var h=Math.min(100,(p.conflicting_student_count/60)*100);return'<div class="mb-1 d-flex align-items-center"><div style="flex:1;font-size:12px;">'+p.course_a.name+' vs '+p.course_b.name+'</div><div class="me-2 text-end" style="width:30px;font-size:12px;">'+p.conflicting_student_count+'</div><div style="height:20px;width:'+h+'%;background:#dc3545;border-radius:3px;min-width:4px;"></div></div>';}).join('');}catch(ex){alert('加载失败');}});});}catch(e){}}
 document.getElementById('conflict-run-btn').addEventListener('click',async function(){var el=document.getElementById('conflict-task-status');el.className='alert alert-warning';el.textContent='正在运行冲突分析...';try{var r=await CourseQSortAPI.admin.runConflictAnalysis({semester:'2026-spring',course_ids:[],threshold:30});el.className='alert alert-success';el.textContent='分析任务已提交';setTimeout(function(){el.textContent='分析完成！共发现 15 对冲突课程';loadConflict();},1500);}catch(e){el.className='alert alert-danger';el.textContent='分析失败';}});
 function _makeSlider(key,label,desc,min,max,step,val,unit,showPercent){
@@ -381,7 +501,7 @@ var TIMETABLE_TEMPLATES = {
 };
 function getTimetableConfig(){
     var raw = localStorage.getItem('timetableConfig');
-    if(raw){ try{ var tc=JSON.parse(raw); if(!tc.totalWeeks) tc.totalWeeks=18; if(!tc.sessionLength) tc.sessionLength=2; return tc; }catch(e){} }
+    if(raw){ try{ var tc=JSON.parse(raw); if(!tc.totalWeeks) tc.totalWeeks=18; return tc; }catch(e){} }
     return TIMETABLE_TEMPLATES['8'];
 }
 function saveTimetableConfig(tc){
@@ -443,8 +563,7 @@ async function loadAlgo(){try{
     h+='<div class="card bg-light mb-4"><div class="card-body">';
     h+='<div class="row g-2 mb-2"><div class="col-md-3"><label class="form-label small">每天节数</label><div class="input-group input-group-sm"><input type="number" class="form-control" id="timetable-period-count" value="'+tc.periodsPerDay+'" min="1" max="15"><button class="btn btn-outline-secondary" id="timetable-apply-count">应用</button></div></div>';
     h+='<div class="col-md-3"><label class="form-label small">学期总周数</label><div class="input-group input-group-sm"><input type="number" class="form-control" id="timetable-total-weeks" value="'+(tc.totalWeeks||18)+'" min="1" max="30"><button class="btn btn-outline-secondary" id="timetable-apply-weeks">应用</button></div></div>';
-    h+='<div class="col-md-3"><label class="form-label small">每次课连排节数</label><div class="input-group input-group-sm"><input type="number" class="form-control" id="timetable-session-length" value="'+(tc.sessionLength||2)+'" min="1" max="6"><button class="btn btn-outline-secondary" id="timetable-apply-session">应用</button></div></div>';
-    h+='<div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-primary btn-sm w-100" id="timetable-template-8">📋 8节模板</button></div>';
+    h+='<div class="col-md-6 d-flex align-items-end"><button class="btn btn-outline-primary btn-sm w-100" id="timetable-template-8">📋 8节模板</button></div>';
     h+='<div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-secondary btn-sm w-100" id="timetable-template-10">📋 10节模板</button></div>';
     h+='<div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-secondary btn-sm w-100" id="timetable-template-11">📋 11节模板</button></div>';
     h+='</div>';
@@ -552,7 +671,6 @@ async function loadAlgo(){try{
     // 课表框架事件绑定
     document.getElementById('timetable-apply-count').addEventListener('click',function(){changePeriodCount(parseInt(document.getElementById('timetable-period-count').value));});
     document.getElementById('timetable-apply-weeks').addEventListener('click',function(){var tc=getTimetableConfig();tc.totalWeeks=parseInt(document.getElementById('timetable-total-weeks').value)||18;saveTimetableConfig(tc);alert('周数已更新为 '+tc.totalWeeks+' 周，重新生成排课方案后生效');});
-    document.getElementById('timetable-apply-session').addEventListener('click',function(){var tc=getTimetableConfig();tc.sessionLength=parseInt(document.getElementById('timetable-session-length').value)||2;saveTimetableConfig(tc);alert('每次课连排节数已更新为 '+tc.sessionLength+'，重新生成排课方案后生效');});
     document.getElementById('timetable-template-8').addEventListener('click',function(){applyTimetableTemplate(8);});
     document.getElementById('timetable-template-10').addEventListener('click',function(){applyTimetableTemplate(10);});
     document.getElementById('timetable-template-11').addEventListener('click',function(){applyTimetableTemplate(11);});
