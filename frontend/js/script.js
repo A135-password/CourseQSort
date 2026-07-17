@@ -493,7 +493,7 @@ document.getElementById('logout-btn').addEventListener('click', function () {
 
 document.getElementById('print-btn').addEventListener('click', function () {
     if (selectedCourses.length === 0) {
-        alert('暂我选择课程，无法查看课表');
+        alert('暂无选择课程，无法查看课表');
         return;
     }
     sessionStorage.setItem('selectedCoursesData', JSON.stringify(selectedCourses));
