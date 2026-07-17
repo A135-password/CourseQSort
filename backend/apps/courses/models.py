@@ -62,6 +62,9 @@ class Course(models.Model):
     required_classroom_types = models.JSONField(default=list, blank=True)
     expected_student_count = models.IntegerField(null=True, blank=True)
     is_professional_course = models.BooleanField(default=True)
+    session_length = models.IntegerField(
+        default=2, help_text='每次课连排节数（每门课程独立设置）'
+    )
     prerequisites = models.JSONField(default=list, blank=True)
     course_id_from_source = models.CharField(
         max_length=50, unique=True, verbose_name='来源系统 courseId'

@@ -20,7 +20,7 @@ var CourseQSortAPI = (function () {
     // ======================== 配置 ========================
 
     var CONFIG = {
-        BASE_URL: 'http://localhost:8000/api/v1',
+        BASE_URL: 'http://8.163.73.251:8000/api/v1',
         USE_MOCK: true,
         LOGIN_MODE: 'mock',
     };
@@ -679,6 +679,7 @@ var CourseQSortAPI = (function () {
                 required_classroom_types: ["多媒体"],
                 expected_student_count: c.capacity,
                 is_professional_course: c.is_professional,
+                session_length: c.session_length || 2,
                 semester: "2026-spring"
             };
         });
@@ -709,6 +710,7 @@ var CourseQSortAPI = (function () {
             required_classroom_types: body.required_classroom_types || ["多媒体"],
             expected_student_count: body.expected_student_count || 100,
             is_professional_course: body.is_professional_course !== false,
+            session_length: body.session_length || 2,
             semester: body.semester || "2026-spring"
         };
         // 同时更新 MOCK_COURSES（保持兼容）
@@ -716,6 +718,7 @@ var CourseQSortAPI = (function () {
             course_id: newId, name: course.name, code: course.code,
             credit: course.credit, teacher: teachers.map(function(t){return t.name;}).join(', '),
             capacity: course.expected_student_count, enrolled_count: 0,
+            session_length: course.session_length,
             time_slots: [], is_professional: course.is_professional_course,
             category: course.is_professional_course ? '专必' : '通识'
         });
@@ -735,6 +738,7 @@ var CourseQSortAPI = (function () {
                     MOCK_COURSES[i].is_professional = body.is_professional_course;
                     MOCK_COURSES[i].category = body.is_professional_course ? '专必' : '通识';
                 }
+                if (body.session_length !== undefined) MOCK_COURSES[i].session_length = body.session_length;
                 break;
             }
         }
@@ -748,6 +752,7 @@ var CourseQSortAPI = (function () {
             required_classroom_types: body.required_classroom_types || ["多媒体"],
             expected_student_count: body.expected_student_count || 100,
             is_professional_course: body.is_professional_course !== false,
+            session_length: body.session_length || 2,
             semester: body.semester || "2026-spring"
         };
     });
@@ -859,8 +864,78 @@ var CourseQSortAPI = (function () {
         return { count: MOCK_CLASSROOMS.length, results: MOCK_CLASSROOMS };
     });
 
+    registerMock('POST', '/admin/classrooms/', function (body) {
+        var newId = Math.max.apply(null, MOCK_CLASSROOMS.map(function(r){return r.id;})) + 1;
+        var classroom = {
+            id: newId,
+            name: body.name || '',
+            capacity: body.capacity || 60,
+            building: body.building || '',
+            equipment_types: body.equipment_types || [],
+            is_lab: body.is_lab || false
+        };
+        MOCK_CLASSROOMS.push(classroom);
+        return classroom;
+    });
+
+    registerMockPattern('PATCH', '/admin/classrooms/{id}/', function (body, vars) {
+        var id = parseInt(vars.id);
+        for (var i = 0; i < MOCK_CLASSROOMS.length; i++) {
+            if (MOCK_CLASSROOMS[i].id === id) {
+                if (body.name !== undefined) MOCK_CLASSROOMS[i].name = body.name;
+                if (body.capacity !== undefined) MOCK_CLASSROOMS[i].capacity = body.capacity;
+                if (body.building !== undefined) MOCK_CLASSROOMS[i].building = body.building;
+                if (body.equipment_types !== undefined) MOCK_CLASSROOMS[i].equipment_types = body.equipment_types;
+                if (body.is_lab !== undefined) MOCK_CLASSROOMS[i].is_lab = body.is_lab;
+                return MOCK_CLASSROOMS[i];
+            }
+        }
+        var err = new Error('Not found'); err.status = 404; throw err;
+    });
+
+    registerMockPattern('DELETE', '/admin/classrooms/{id}/', function (body, vars) {
+        var id = parseInt(vars.id);
+        var before = MOCK_CLASSROOMS.length;
+        MOCK_CLASSROOMS = MOCK_CLASSROOMS.filter(function (r) { return r.id !== id; });
+        if (MOCK_CLASSROOMS.length === before) { var err = new Error('Not found'); err.status = 404; throw err; }
+        return {};
+    });
+
     registerMock('GET', '/admin/majors/', function () {
         return { count: MOCK_MAJORS.length, results: MOCK_MAJORS };
+    });
+
+    registerMock('POST', '/admin/majors/', function (body) {
+        var newId = Math.max.apply(null, MOCK_MAJORS.map(function(m){return m.id;})) + 1;
+        var major = {
+            id: newId,
+            name: body.name || '',
+            code: body.code || '',
+            student_count: body.student_count || 0
+        };
+        MOCK_MAJORS.push(major);
+        return major;
+    });
+
+    registerMockPattern('PATCH', '/admin/majors/{id}/', function (body, vars) {
+        var id = parseInt(vars.id);
+        for (var i = 0; i < MOCK_MAJORS.length; i++) {
+            if (MOCK_MAJORS[i].id === id) {
+                if (body.name !== undefined) MOCK_MAJORS[i].name = body.name;
+                if (body.code !== undefined) MOCK_MAJORS[i].code = body.code;
+                if (body.student_count !== undefined) MOCK_MAJORS[i].student_count = body.student_count;
+                return MOCK_MAJORS[i];
+            }
+        }
+        var err = new Error('Not found'); err.status = 404; throw err;
+    });
+
+    registerMockPattern('DELETE', '/admin/majors/{id}/', function (body, vars) {
+        var id = parseInt(vars.id);
+        var before = MOCK_MAJORS.length;
+        MOCK_MAJORS = MOCK_MAJORS.filter(function (m) { return m.id !== id; });
+        if (MOCK_MAJORS.length === before) { var err = new Error('Not found'); err.status = 404; throw err; }
+        return {};
     });
 
     registerMockPattern('GET', '/admin/majors/{id}/students/', function (params, vars) {
@@ -1082,11 +1157,17 @@ var CourseQSortAPI = (function () {
             updateTeacher: function (id, data) { return apiCall('PATCH', '/admin/teachers/' + id + '/', data); },
             deleteTeacher: function (id) { return apiCall('DELETE', '/admin/teachers/' + id + '/'); },
             getClassrooms: function () { return apiCall('GET', '/admin/classrooms/'); },
+            createClassroom: function (data) { return apiCall('POST', '/admin/classrooms/', data); },
+            updateClassroom: function (id, data) { return apiCall('PATCH', '/admin/classrooms/' + id + '/', data); },
+            deleteClassroom: function (id) { return apiCall('DELETE', '/admin/classrooms/' + id + '/'); },
             getStudents: function (params) { return apiCall('GET', '/admin/students/'); },
             createStudent: function (data) { return apiCall('POST', '/admin/students/', data); },
             updateStudent: function (id, data) { return apiCall('PATCH', '/admin/students/' + id + '/', data); },
             deleteStudent: function (id) { return apiCall('DELETE', '/admin/students/' + id + '/'); },
             getMajors: function () { return apiCall('GET', '/admin/majors/'); },
+            createMajor: function (data) { return apiCall('POST', '/admin/majors/', data); },
+            updateMajor: function (id, data) { return apiCall('PATCH', '/admin/majors/' + id + '/', data); },
+            deleteMajor: function (id) { return apiCall('DELETE', '/admin/majors/' + id + '/'); },
             getMajorStudents: function (majorId) { return apiCall('GET', '/admin/majors/' + majorId + '/students/'); },
 
             getProtectedSlots: function () { return apiCall('GET', '/admin/protected-slots/'); },

@@ -127,9 +127,9 @@ def run(plan, progress_callback=None):
     else:
         VALID_PERIODS = DEFAULT_VALID_PERIODS
 
-    # 每次课连排节数
-    session_length = int(config.get('session_length', 0)) or 2
-    session_length = max(1, min(session_length, 6))
+    # 全局默认连排节数（作为课程未单独设置时的回退）
+    default_session_length = int(config.get('session_length', 0)) or 2
+    default_session_length = max(1, min(default_session_length, 6))
 
     # 从 period_times 分析上下行分界
     period_times = config.get('period_times', [])
@@ -137,7 +137,6 @@ def run(plan, progress_callback=None):
     if period_times:
         for i in range(len(period_times) - 1):
             try:
-                # 解析时间，找大间隙（>90分钟=午休）
                 end_h, end_m = map(int, period_times[i]['end'].split(':'))
                 start_h, start_m = map(int, period_times[i+1]['start'].split(':'))
                 gap = (start_h * 60 + start_m) - (end_h * 60 + end_m)
@@ -146,31 +145,29 @@ def run(plan, progress_callback=None):
             except (KeyError, ValueError):
                 pass
 
-    # 构建有效连排块：每个块是连续 N 个节次且不跨分界
-    # session_groups[day] = [(start_period, end_period), ...] 有效的连排块
-    session_groups = {d: [] for d in VALID_DAYS}
-    for d in VALID_DAYS:
-        p = 1
-        while p <= len(VALID_PERIODS):
-            end = p + session_length - 1
-            if end > len(VALID_PERIODS):
-                break
-            # 检查是否跨分界
-            crosses = False
-            for bp in break_after:
-                if p <= bp < end:
-                    crosses = True
+    # 预构建不同连排节数（1~6）的有效连排块映射
+    # all_session_groups[sl][day] = [(start_period, end_period), ...]
+    def _build_groups(sl):
+        groups = {d: [] for d in VALID_DAYS}
+        for d in VALID_DAYS:
+            p = 1
+            while p <= len(VALID_PERIODS):
+                end = p + sl - 1
+                if end > len(VALID_PERIODS):
                     break
-            if not crosses:
-                session_groups[d].append((p, end))
-            p += 1
+                crosses = any(p <= bp < end for bp in break_after)
+                if not crosses:
+                    groups[d].append((p, end))
+                p += 1
+            if not groups[d]:
+                for p in VALID_PERIODS:
+                    end = min(p + sl - 1, len(VALID_PERIODS))
+                    groups[d].append((p, end))
+        return groups
 
-    # 如果某天没有足够长的连排块（session_length太大），用所有节次作为单节块
-    for d in VALID_DAYS:
-        if not session_groups[d]:
-            for p in VALID_PERIODS:
-                end = min(p + session_length - 1, len(VALID_PERIODS))
-                session_groups[d].append((p, end))
+    all_session_groups = {}
+    for sl in range(1, 7):
+        all_session_groups[sl] = _build_groups(sl)
 
     # 时段占用计数：记录每个 (day, period) 已分配课程数
     slot_usage = {}
@@ -185,8 +182,14 @@ def run(plan, progress_callback=None):
         total_hours = course.hours or 48
         teacher = course.teachers.first()
 
-        # 计算总"教学次"数：每次课 session_length 个连续节次
-        total_sessions = max(1, math.ceil(total_hours / session_length))
+        # 每门课独立的连排节数
+        course_sl = int(getattr(course, 'session_length', 0) or 0)
+        if not (1 <= course_sl <= 6):
+            course_sl = default_session_length
+        session_groups = all_session_groups[course_sl]
+
+        # 计算总"教学次"数：每次课 course_sl 个连续节次
+        total_sessions = max(1, math.ceil(total_hours / course_sl))
 
         # 按学期周数分配教学次
         if total_sessions <= total_weeks:
@@ -225,7 +228,7 @@ def run(plan, progress_callback=None):
 
             # 时段冲突检测：如果这些节次都已被大量占用则跳过
             usage = sum(slot_usage[(day, p)] for p in range(start_p, end_p + 1))
-            if usage >= 3 * session_length and random.random() < 0.7:
+            if usage >= 3 * course_sl and random.random() < 0.7:
                 continue
 
             weekly_blocks.append((day, start_p, end_p))
