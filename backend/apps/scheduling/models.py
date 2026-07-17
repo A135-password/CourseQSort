@@ -45,6 +45,7 @@ class ScheduleEntry(models.Model):
     )
     day_of_week = models.IntegerField()
     period = models.IntegerField()
+    week = models.IntegerField(default=1, help_text='第几周')
     student_group_ids = models.JSONField(default=list, blank=True)
 
     class Meta:
