@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 
 class Major(models.Model):
@@ -15,6 +16,10 @@ class Major(models.Model):
 
 
 class Teacher(models.Model):
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='teacher_profile', verbose_name='绑定用户'
+    )
     name = models.CharField(max_length=50)
     employee_no = models.CharField(max_length=50, blank=True, default='')
     department = models.CharField(max_length=100, blank=True, default='')
@@ -98,6 +103,10 @@ class CourseScheduleItem(models.Model):
 
 
 class Student(models.Model):
+    user = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='student_profile', verbose_name='绑定用户'
+    )
     student_no = models.CharField(max_length=50, blank=True, default='')
     name = models.CharField(max_length=50, blank=True, default='')
     major = models.ForeignKey(

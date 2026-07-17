@@ -1,3 +1,5 @@
+import uuid
+
 from rest_framework import serializers
 from apps.courses.models import Major, Teacher, Classroom, Course, Student
 
@@ -21,9 +23,14 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
 
 class StudentSerializer(serializers.ModelSerializer):
+    major_name = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Student
-        fields = ['id', 'student_no', 'name']
+        fields = ['id', 'student_no', 'name', 'major', 'major_name', 'grade', 'class_identification']
+
+    def get_major_name(self, obj):
+        return obj.major.name if obj.major else ''
 
 
 class NestedMajorSerializer(serializers.ModelSerializer):
@@ -74,7 +81,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
         fields = [
-            'name', 'code', 'credit', 'hours',
+            'name', 'code', 'credit', 'hours', 'semester',
             'major_id', 'teacher_ids', 'required_classroom_types',
             'expected_student_count', 'is_professional_course',
         ]
@@ -84,6 +91,8 @@ class CourseCreateSerializer(serializers.ModelSerializer):
         major_id = validated_data.pop('major_id', None)
         if major_id:
             validated_data['major_id'] = major_id
+        # 自动生成唯一 course_id_from_source（手动创建课程的前缀为 manual-）
+        validated_data['course_id_from_source'] = f"manual-{uuid.uuid4().hex[:12]}"
         course = Course.objects.create(**validated_data)
         if teacher_ids:
             course.teachers.set(Teacher.objects.filter(id__in=teacher_ids))

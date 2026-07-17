@@ -5,7 +5,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.accounts.serializers import LoginSerializer, UserSerializer, LogoutSerializer
+from apps.accounts.serializers import (
+    LoginSerializer, UserSerializer, LogoutSerializer, RegisterSerializer,
+)
 
 
 class LoginView(APIView):
@@ -41,6 +43,32 @@ class LogoutView(APIView):
                 {'detail': 'Invalid or expired refresh token'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class RegisterView(APIView):
+    """注册接口 — 学生/教师通过真实姓名+学号/工号绑定数据库中的记录"""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = serializer.save()
+        # 注册成功后自动登录，返回 JWT
+        from apps.accounts.serializers import LoginSerializer
+        profile = getattr(user, 'profile', None)
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'role': profile.role if profile else 'STUDENT',
+                'name': profile.name if profile else user.username,
+            },
+            'detail': '注册成功',
+        }, status=status.HTTP_201_CREATED)
 
 
 class MeView(APIView):
