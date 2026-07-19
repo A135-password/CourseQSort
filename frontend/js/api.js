@@ -432,6 +432,7 @@ var CourseQSortAPI = (function () {
             courses: mockSelected.map(function (sc) {
                 return {
                     course_id: sc.course_id, name: sc.name,
+                    credit: sc.credit,
                     teacher: sc.teacher, time_slots: sc.time_slots,
                     classroom: 'A101', mandatory: sc.mandatory || false
                 };
