@@ -8,8 +8,8 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Profile
 from apps.conflict_analysis.models import ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
-from apps.courses.models import Course, CourseScheduleItem
 from apps.conflict_analysis.tasks import run_analysis_sync
+from apps.courses.models import Course, CourseScheduleItem
 
 
 class ConflictAnalysisTestMixin:

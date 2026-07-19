@@ -5,12 +5,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.accounts.serializers import (
-    LoginSerializer,
-    LogoutSerializer,
-    RegisterSerializer,
-    UserSerializer,
-)
+from apps.accounts.serializers import LoginSerializer, LogoutSerializer, RegisterSerializer, UserSerializer
 
 
 class LoginView(APIView):
