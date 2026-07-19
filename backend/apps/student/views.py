@@ -1,20 +1,113 @@
-import time
-
-from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import F
+from collections import defaultdict
+from django.db import transaction
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsStudentUser
-from apps.courses.models import Course
+from apps.courses.models import Course, CourseAssignment, Student
 from apps.student.bitmap import build_bitmap, has_conflict
 from apps.student.models import Enrollment
 from apps.student.recommendation import recommend_courses
 
 SELECT_RETRY_COUNT = 3
 SELECT_RETRY_DELAY_SECONDS = 0.05
+
+
+def _is_course_required_for_user(course, user):
+    """检查课程对某用户是否必修（基于 CourseAssignment 规则）"""
+    try:
+        student = Student.objects.get(user=user)
+    except Student.DoesNotExist:
+        return False
+
+    # 构建查询条件：匹配专业 + 年级 + 班级
+    q = Q(course=course)
+    # 专业匹配（允许 null 表示不限专业，但必须有匹配规则）
+    q &= Q(major=student.major) | Q(major__isnull=True)
+    # 年级匹配
+    q &= Q(grade=student.grade) | Q(grade='')
+    # 班级匹配
+    q &= Q(class_identification=student.class_identification) | Q(class_identification='')
+
+    return CourseAssignment.objects.filter(q).exists()
+
+
+def _build_segments(items, default_teacher=''):
+    """
+    将 CourseScheduleItem 列表合并为 segments。
+    逐周对比课表快照，只按时间段（星期+节次）判断是否相同，
+    相同时间段的连续周合并为一个 segment（忽略教室、教师的差异）。
+    """
+    if not items:
+        return [], ''
+
+    # 第一步：逐周建立完整快照（含教室/教师，用于最终展示）
+    week_full = defaultdict(set)
+
+    for item in items:
+        ws = item.week_start or 1
+        we = item.week_end or 18
+        cr = item.classroom.name if item.classroom else ''
+        t = item.teacher.name if item.teacher else default_teacher
+
+        for w in range(ws, we + 1):
+            week_full[w].add((item.day_of_week, item.period, cr, t))
+
+    if not week_full:
+        return [], ''
+
+    # 第二步：只按"星期几"做比较 key，忽略节次/教室/教师差异
+    week_key = {}
+    for w, s in week_full.items():
+        week_key[w] = tuple(sorted(set(dow for dow, _period, _cr, _t in s)))
+
+    sorted_weeks = sorted(week_key.keys())
+
+    # 第三步：合并连续且时间段相同的周
+    segments = []
+    seg_start = sorted_weeks[0]
+    prev_key = week_key[seg_start]
+    prev_full = week_full[seg_start]
+
+    for i in range(1, len(sorted_weeks)):
+        w = sorted_weeks[i]
+        if w == sorted_weeks[i - 1] + 1 and week_key[w] == prev_key:
+            continue
+        _finish_segment(segments, seg_start, sorted_weeks[i - 1], prev_full)
+        seg_start = w
+        prev_key = week_key[w]
+        prev_full = week_full[w]
+
+    _finish_segment(segments, seg_start, sorted_weeks[-1], prev_full)
+
+    first_cls = segments[0]['classroom'] if segments else ''
+    return segments, first_cls
+
+
+def _finish_segment(segments, ws, we, slot_data):
+    """将一组 (dow, period, classroom, teacher) 转为 segment。
+    slot_data 是 set。
+    """
+    time_slots = []
+    classroom = ''
+    teacher = ''
+    for dow, period, cr, t in sorted(slot_data):
+        time_slots.append({'day_of_week': dow, 'period': period})
+        if cr and not classroom:
+            classroom = cr
+        if t and not teacher:
+            teacher = t
+
+    segments.append({
+        'week_start': ws,
+        'week_end': we,
+        'time_slots': time_slots,
+        'classroom': classroom,
+        'teacher': teacher,
+    })
 
 
 class ScheduleView(APIView):
@@ -36,20 +129,22 @@ class ScheduleView(APIView):
             if first_teacher:
                 teacher_name = first_teacher.name
 
-            classroom_name = ""
-            first_item = items.first()
-            if first_item and first_item.classroom:
-                classroom_name = first_item.classroom.name
+            # 使用逐周对比合并算法构建 segments
+            segments, classroom_name = _build_segments(items, teacher_name)
 
-            courses_data.append(
-                {
-                    "course_id": course.id,
-                    "name": course.name,
-                    "teacher": teacher_name,
-                    "time_slots": [{"day_of_week": day, "period": period} for day, period in time_slots],
-                    "classroom": classroom_name,
-                }
-            )
+            is_mandatory = _is_course_required_for_user(c, request.user)
+            courses_data.append({
+                'course_id': c.id,
+                'name': c.name,
+                'credit': c.credit,
+                'teacher': teacher_name,
+                'time_slots': [
+                    {'day_of_week': d, 'period': p} for d, p in time_slots
+                ],
+                'classroom': classroom_name,
+                'mandatory': is_mandatory,
+                'segments': segments,
+            })
 
         bitmap = build_bitmap(list(slots))
         return Response(
@@ -66,8 +161,10 @@ class CourseListView(APIView):
     permission_classes = [IsAuthenticated, IsStudentUser]
 
     def get(self, request):
-        major_id = request.query_params.get("major")
-        keyword = request.query_params.get("keyword")
+        major_id = request.query_params.get('major')
+        keyword = request.query_params.get('keyword')
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
 
         user_slots = set()
         for enrollment in Enrollment.objects.filter(user=request.user).select_related("course"):
@@ -81,9 +178,17 @@ class CourseListView(APIView):
         if keyword:
             courses = courses.filter(name__icontains=keyword)
 
+        # 分页
+        total_count = courses.count()
+        start = (page - 1) * page_size
+        courses = courses[start:start + page_size]
+
         results = []
-        for course in courses:
-            time_slots_raw = list(set((item.day_of_week, item.period) for item in course.schedule_items.all()))
+        for c in courses:
+            items = c.schedule_items.all()
+            time_slots_raw = list(set(
+                (item.day_of_week, item.period) for item in items
+            ))
             course_bitmap = build_bitmap(time_slots_raw)
             conflict = has_conflict(user_bitmap, course_bitmap)
 
@@ -107,25 +212,33 @@ class CourseListView(APIView):
             first_teacher = course.teachers.first()
             if first_teacher:
                 teacher_name = first_teacher.name
-            enrolled_count = course.enrollments.count()
-            capacity = course.expected_student_count or 9999
 
-            results.append(
-                {
-                    "course_id": course.id,
-                    "name": course.name,
-                    "credit": course.credit,
-                    "teacher": teacher_name,
-                    "capacity": capacity,
-                    "enrolled_count": enrolled_count,
-                    "time_slots": [{"day_of_week": day, "period": period} for day, period in time_slots_raw],
-                    "remaining_capacity": capacity - enrolled_count,
-                    "conflict": conflict,
-                    "conflict_with": conflict_with,
-                }
-            )
+            # 使用逐周对比合并算法构建 segments
+            segments, classroom_name = _build_segments(items, teacher_name)
 
-        return Response({"count": len(results), "results": results})
+            enrolled_count = c.enrollments.count()
+            capacity = c.expected_student_count or 9999
+
+            is_mandatory = _is_course_required_for_user(c, request.user)
+            results.append({
+                'course_id': c.id,
+                'name': c.name,
+                'credit': c.credit,
+                'teacher': teacher_name,
+                'capacity': capacity,
+                'enrolled_count': enrolled_count,
+                'time_slots': [
+                    {'day_of_week': d, 'period': p} for d, p in time_slots_raw
+                ],
+                'classroom': classroom_name,
+                'segments': segments,
+                'remaining_capacity': capacity - enrolled_count,
+                'conflict': conflict,
+                'conflict_with': conflict_with,
+                'mandatory': is_mandatory,
+            })
+
+        return Response({'count': total_count, 'results': results})
 
 
 class ConflictDetailView(APIView):
@@ -282,7 +395,17 @@ class DropCourseView(APIView):
         except Course.DoesNotExist:
             return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        deleted, _ = Enrollment.objects.filter(user=request.user, course=course).delete()
+        # 检查是否为必修课
+        if _is_course_required_for_user(course, request.user):
+            return Response({
+                'course_id': course.id,
+                'status': 'REQUIRED',
+                'message': '必修课不可退',
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        deleted, _ = Enrollment.objects.filter(
+            user=request.user, course=course
+        ).delete()
         if not deleted:
             return Response(
                 {
