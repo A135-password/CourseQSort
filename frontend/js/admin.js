@@ -456,7 +456,7 @@ document.getElementById('student-edit-modal-save').addEventListener('click', asy
         major: parseInt(document.getElementById('student-edit-major').value) || null,
         grade: document.getElementById('student-edit-grade').value,
         class_group: classGroupId,
-        class_identification: document.getElementById('student-edit-class').options[document.getElementById('student-edit-class').selectedIndex].text
+        class_identification: (function(){var sel=document.getElementById('student-edit-class');return sel&&sel.selectedIndex>=0?sel.options[sel.selectedIndex].text:'';})()
     };
     try {
         if(_editingStudentId){
