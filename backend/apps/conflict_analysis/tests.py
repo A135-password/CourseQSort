@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import Profile
 from apps.conflict_analysis.models import ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
 from apps.courses.models import Course, CourseScheduleItem
+from apps.conflict_analysis.tasks import run_analysis_sync
 
 
 class ConflictAnalysisTestMixin:
@@ -48,7 +49,8 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
             task.conflict_pairs_found = 2
             task.save(update_fields=["status", "progress", "conflict_pairs_found"])
 
-        with patch("apps.conflict_analysis.tasks.run_analysis_sync", side_effect=fake_run):
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
             response = self.client.post(
                 "/api/v1/admin/conflict-analysis/run/",
                 {
@@ -60,7 +62,7 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
             )
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
+        self.assertEqual(response.data["status"], "PENDING")
         self.assertEqual(ConflictAnalysisResult.objects.count(), 1)
         self.assertEqual(ConflictTaskRecord.objects.count(), 1)
 
@@ -146,20 +148,24 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
             period=1,
         )
 
-        response = self.client.post(
-            "/api/v1/admin/conflict-analysis/run/",
-            {
-                "semester": "2026-1",
-                "course_ids": [self.course_a.id, self.course_b.id, self.course_c.id],
-                "threshold": 1,
-            },
-            format="json",
-        )
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
+            response = self.client.post(
+                "/api/v1/admin/conflict-analysis/run/",
+                {
+                    "semester": "2026-1",
+                    "course_ids": [self.course_a.id, self.course_b.id, self.course_c.id],
+                    "threshold": 1,
+                },
+                format="json",
+            )
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
+        self.assertEqual(response.data["status"], "PENDING")
 
         task = ConflictTaskRecord.objects.get(task_id=response.data["task_id"])
+        run_analysis_sync(str(task.task_id))
+        task.refresh_from_db()
         result = task.result
         pair = ConflictPair.objects.get(result=result)
 
@@ -174,7 +180,7 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
             {self.course_a.id, self.course_b.id},
         )
         self.assertEqual(pair.conflicting_student_count, 1)
-        self.assertAlmostEqual(pair.conflict_rate, 0.33, places=2)
+        self.assertAlmostEqual(pair.conflict_rate, 1.0, places=2)
 
 
 class ConflictAnalysisPerformanceTests(ConflictAnalysisTestMixin, TestCase):
@@ -207,22 +213,25 @@ class ConflictAnalysisPerformanceTests(ConflictAnalysisTestMixin, TestCase):
             )
 
     def test_conflict_analysis_performance_smoke(self):
-        started_at = time.perf_counter()
-        response = self.client.post(
-            "/api/v1/admin/conflict-analysis/run/",
-            {
-                "semester": "2026-1",
-                "course_ids": [course.id for course in self.courses],
-                "threshold": 1,
-            },
-            format="json",
-        )
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
+            started_at = time.perf_counter()
+            response = self.client.post(
+                "/api/v1/admin/conflict-analysis/run/",
+                {
+                    "semester": "2026-1",
+                    "course_ids": [course.id for course in self.courses],
+                    "threshold": 1,
+                },
+                format="json",
+            )
+        task = ConflictTaskRecord.objects.get(task_id=response.data["task_id"])
+        run_analysis_sync(str(task.task_id))
         duration = time.perf_counter() - started_at
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
-
-        task = ConflictTaskRecord.objects.get(task_id=response.data["task_id"])
+        self.assertEqual(response.data["status"], "PENDING")
+        task.refresh_from_db()
         expected_pairs = len(self.courses) * (len(self.courses) - 1) // 2
         self.assertEqual(task.status, "SUCCESS")
         self.assertEqual(task.total_pairs, expected_pairs)

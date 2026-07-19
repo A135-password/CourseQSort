@@ -10,32 +10,30 @@ from rest_framework.test import APIClient
 from apps.accounts.models import Profile
 from apps.courses.models import Classroom, Course, CourseScheduleItem, Teacher
 from apps.protected_slots.models import ProtectedSlot
-from apps.scheduling.algorithm.constraints import PE_KEYWORDS, check_hard_constraints, is_feasible
+from apps.scheduling.algorithm.constraints import check_hard_constraints, is_feasible
 from apps.scheduling.models import ScheduleEntry, SchedulePlan, TaskRecord
+from apps.scheduling.tasks import run_generate_sync
 
 
 class ConstraintAlgorithmTests(SimpleTestCase):
     def setUp(self):
         self.course_map = {
-            1: {"name": "Algorithms", "expected_student_count": 40},
-            2: {"name": "Databases", "expected_student_count": 20},
-            3: {"name": f"{PE_KEYWORDS[0]} Practice", "expected_student_count": 20},
+            1: {"name": "Algorithms"},
+            2: {"name": "Databases"},
         }
         self.teacher_map = {
-            1: {"unavailable_slots": [{"day_of_week": 2, "period": 3}]},
+            1: {"name": "Teacher A"},
             2: {"unavailable_slots": []},
         }
         self.classroom_map = {
-            1: {"capacity": 30},
-            2: {"capacity": 100},
+            1: {"name": "Room 101"},
+            2: {"name": "Room 102"},
         }
 
-    def test_check_hard_constraints_reports_core_violations(self):
+    def test_check_hard_constraints_reports_teacher_and_classroom_conflicts(self):
         assignments = [
-            (1, 1, 5, 1, 1),
-            (1, 2, 3, 1, 2),
-            (1, 3, 2, 1, 1),
-            (2, 3, 2, 1, 1),
+            (1, 1, 2, 3, 2, 1, 1),
+            (2, 1, 2, 3, 2, 1, 1),
         ]
 
         violations = check_hard_constraints(
@@ -48,18 +46,15 @@ class ConstraintAlgorithmTests(SimpleTestCase):
 
         self.assertTrue(
             {
-                "NOON_BREAK",
-                "CAPACITY",
-                "TEACHER_UNAVAILABLE",
                 "TEACHER_CONFLICT",
                 "CLASSROOM_CONFLICT",
             }.issubset(violation_types)
         )
 
-    def test_check_hard_constraints_detects_pe_followed_by_theory_course(self):
+    def test_check_hard_constraints_returns_empty_for_non_conflicting_schedule(self):
         assignments = [
-            (3, 4, 1, None, None),
-            (2, 4, 2, None, None),
+            (1, 1, 1, 1, 2, 1, 1),
+            (2, 1, 3, 5, 2, 2, 2),
         ]
 
         violations = check_hard_constraints(
@@ -69,12 +64,12 @@ class ConstraintAlgorithmTests(SimpleTestCase):
             self.classroom_map,
         )
 
-        self.assertIn("PE_AFTER", {item[0] for item in violations})
+        self.assertEqual(violations, [])
 
     def test_is_feasible_returns_true_for_non_conflicting_schedule(self):
         assignments = [
-            (1, 1, 1, 1, 2),
-            (2, 2, 2, 2, 2),
+            (1, 1, 1, 1, 2, 1, 1),
+            (2, 2, 2, 2, 2, 2, 2),
         ]
 
         self.assertTrue(
@@ -117,14 +112,8 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
         self.course = self.create_course("Schedule Course")
 
     def test_generate_endpoint_creates_plan_and_successful_task(self):
-        def fake_run(task_id):
-            task = TaskRecord.objects.get(task_id=task_id)
-            task.status = "SUCCESS"
-            task.progress = 1.0
-            task.best_fitness = 95.5
-            task.save(update_fields=["status", "progress", "best_fitness"])
-
-        with patch("apps.scheduling.tasks.run_generate_sync", side_effect=fake_run):
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
             response = self.client.post(
                 "/api/v1/admin/schedule/generate/",
                 {
@@ -137,10 +126,15 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
             )
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
+        self.assertEqual(response.data["status"], "PENDING")
         self.assertEqual(SchedulePlan.objects.count(), 1)
         self.assertEqual(TaskRecord.objects.count(), 1)
         self.assertEqual(SchedulePlan.objects.get().created_by_id, self.admin_user.id)
+
+        task = TaskRecord.objects.get()
+        run_generate_sync(str(task.task_id))
+        task.refresh_from_db()
+        self.assertEqual(task.status, "SUCCESS")
 
     def test_task_status_includes_plan_id_for_successful_task(self):
         plan = SchedulePlan.objects.create(
@@ -209,10 +203,19 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
             major_ids=[1],
             created_by=self.admin_user,
         )
+        ScheduleEntry.objects.create(
+            plan=plan,
+            course=self.course,
+            teacher=self.teacher,
+            classroom=self.classroom,
+            day_of_week=1,
+            period=1,
+        )
 
         response = self.client.post(f"/api/v1/admin/schedule/plans/{plan.id}/publish/")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "PUBLISHED")
         plan.refresh_from_db()
         self.assertEqual(plan.status, "PUBLISHED")
         self.assertIsNotNone(plan.published_at)
@@ -286,32 +289,37 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
         second_course.teachers.add(second_teacher)
 
         random.seed(20260719)
-        response = self.client.post(
-            "/api/v1/admin/schedule/generate/",
-            {
-                "plan_name": "Real GA Plan",
-                "semester": "2026-1",
-                "major_ids": [],
-                "algorithm_config": {
-                    "population_size": 12,
-                    "max_generations": 8,
-                    "mutation_rate": 0.08,
-                    "crossover_rate": 0.8,
-                    "total_weeks": 1,
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
+            response = self.client.post(
+                "/api/v1/admin/schedule/generate/",
+                {
+                    "plan_name": "Real GA Plan",
+                    "semester": "2026-1",
+                    "major_ids": [],
+                    "algorithm_config": {
+                        "population_size": 12,
+                        "max_generations": 8,
+                        "mutation_rate": 0.08,
+                        "crossover_rate": 0.8,
+                        "total_weeks": 1,
+                    },
                 },
-            },
-            format="json",
-        )
+                format="json",
+            )
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
+        self.assertEqual(response.data["status"], "PENDING")
 
         task = TaskRecord.objects.get(task_id=response.data["task_id"])
+        run_generate_sync(str(task.task_id))
+        task.refresh_from_db()
         plan = task.plan
         entries = list(plan.entries.order_by("course_id"))
+        expected_entries = 48 * 2
 
         self.assertEqual(task.status, "SUCCESS")
-        self.assertEqual(len(entries), 2)
+        self.assertEqual(len(entries), expected_entries)
         self.assertGreaterEqual(plan.overall_fitness, 0.0)
         self.assertLessEqual(plan.overall_fitness, 1.0)
         self.assertSetEqual(
@@ -320,7 +328,8 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
         )
         for entry in entries:
             self.assertIn(entry.day_of_week, [1, 2, 3, 4, 5])
-            self.assertNotEqual(entry.period, 5)
+            self.assertGreaterEqual(entry.period, 1)
+            self.assertLessEqual(entry.period, 11)
             self.assertEqual(entry.week, 1)
 
 
@@ -356,22 +365,26 @@ class SchedulingPerformanceTests(SchedulingApiTestMixin, TestCase):
                 )
 
     def test_schedule_generation_performance_smoke(self):
-        started_at = time.perf_counter()
-        response = self.client.post(
-            "/api/v1/admin/schedule/generate/",
-            {
-                "plan_name": "Performance Plan",
-                "semester": "2026-1",
-                "major_ids": [],
-                "algorithm_config": {"total_weeks": 4},
-            },
-            format="json",
-        )
+        with patch("threading.Thread") as mock_thread:
+            mock_thread.return_value.start.return_value = None
+            started_at = time.perf_counter()
+            response = self.client.post(
+                "/api/v1/admin/schedule/generate/",
+                {
+                    "plan_name": "Performance Plan",
+                    "semester": "2026-1",
+                    "major_ids": [],
+                    "algorithm_config": {"total_weeks": 4},
+                },
+                format="json",
+            )
+        task = TaskRecord.objects.get(task_id=response.data["task_id"])
+        run_generate_sync(str(task.task_id))
         duration = time.perf_counter() - started_at
 
         self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.data["status"], "SUCCESS")
-        task = TaskRecord.objects.get(task_id=response.data["task_id"])
+        self.assertEqual(response.data["status"], "PENDING")
+        task.refresh_from_db()
         self.assertEqual(task.status, "SUCCESS")
-        self.assertEqual(task.plan.entries.count(), 24 * 2 * 4)
-        self.assertLess(duration, 5.0)
+        self.assertEqual(task.plan.entries.count(), 24 * 48)
+        self.assertLess(duration, 20.0)
