@@ -10,10 +10,9 @@
 
 import traceback
 from collections import defaultdict
-from apps.conflict_analysis.models import (
-    ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
-)
-from apps.courses.models import Course, CourseScheduleItem, CourseAssignment, Student
+
+from apps.conflict_analysis.models import ConflictPair, ConflictTaskRecord
+from apps.courses.models import Course, CourseAssignment, Student
 
 
 def run_analysis_sync(task_id):
@@ -23,9 +22,9 @@ def run_analysis_sync(task_id):
     except ConflictTaskRecord.DoesNotExist:
         return
 
-    task.status = 'RUNNING'
+    task.status = "RUNNING"
     task.progress = 0.0
-    task.save(update_fields=['status', 'progress'])
+    task.save(update_fields=["status", "progress"])
 
     try:
         result = task.result
@@ -33,26 +32,23 @@ def run_analysis_sync(task_id):
         threshold = result.threshold
 
         # 加载课程 + 排课时段
-        courses = Course.objects.filter(semester=semester).prefetch_related(
-            'schedule_items', 'assignments'
-        )
+        courses = Course.objects.filter(semester=semester).prefetch_related("schedule_items", "assignments")
         course_list = list(courses)
 
         if not course_list:
-            task.status = 'SUCCESS'
+            task.status = "SUCCESS"
             task.progress = 1.0
             task.total_pairs = 0
             task.conflict_pairs_found = 0
-            task.save(update_fields=['status', 'progress', 'total_pairs',
-                                      'conflict_pairs_found'])
+            task.save(update_fields=["status", "progress", "total_pairs", "conflict_pairs_found"])
             result.course_count = 0
             result.conflict_pairs_count = 0
-            result.save(update_fields=['course_count', 'conflict_pairs_count'])
+            result.save(update_fields=["course_count", "conflict_pairs_count"])
             return
 
         total_pairs = len(course_list) * (len(course_list) - 1) // 2
         task.total_pairs = total_pairs
-        task.save(update_fields=['total_pairs'])
+        task.save(update_fields=["total_pairs"])
 
         # 构建每门课的时段集合
         course_slots = {}
@@ -65,19 +61,17 @@ def run_analysis_sync(task_id):
         # 构建每门课 → 受影响学生的查询条件
         # CourseAssignment 定义了 (major, grade, class_identification) → course
         course_assignments = defaultdict(list)
-        for ca in CourseAssignment.objects.filter(
-            course__semester=semester
-        ).select_related('major'):
-            course_assignments[ca.course_id].append({
-                'major_id': ca.major_id,
-                'grade': ca.grade or '',
-                'class_identification': ca.class_identification or '',
-            })
+        for ca in CourseAssignment.objects.filter(course__semester=semester).select_related("major"):
+            course_assignments[ca.course_id].append(
+                {
+                    "major_id": ca.major_id,
+                    "grade": ca.grade or "",
+                    "class_identification": ca.class_identification or "",
+                }
+            )
 
         # 预加载所有学生
-        all_students = list(Student.objects.all().values(
-            'id', 'major_id', 'grade', 'class_identification'
-        ))
+        all_students = list(Student.objects.all().values("id", "major_id", "grade", "class_identification"))
 
         # 为每门课构建受影响学生 ID 集合（缓存）
         course_student_ids = {}
@@ -96,15 +90,14 @@ def run_analysis_sync(task_id):
             for s in all_students:
                 for rule in rules:
                     match = True
-                    if rule['major_id'] and s['major_id'] != rule['major_id']:
+                    if rule["major_id"] and s["major_id"] != rule["major_id"]:
                         match = False
-                    if rule['grade'] and s['grade'] != rule['grade']:
+                    if rule["grade"] and s["grade"] != rule["grade"]:
                         match = False
-                    if (rule['class_identification']
-                            and s['class_identification'] != rule['class_identification']):
+                    if rule["class_identification"] and s["class_identification"] != rule["class_identification"]:
                         match = False
                     if match:
-                        ids.add(s['id'])
+                        ids.add(s["id"])
                         break
             course_student_ids[course_id] = ids
             return ids
@@ -126,7 +119,7 @@ def run_analysis_sync(task_id):
                 if analyzed - last_progress_save >= 50:
                     task.analyzed_pairs = analyzed
                     task.progress = round(min(1.0, analyzed / max(total_pairs, 1)), 4)
-                    task.save(update_fields=['analyzed_pairs', 'progress'])
+                    task.save(update_fields=["analyzed_pairs", "progress"])
                     last_progress_save = analyzed
 
                 if overlap:
@@ -160,18 +153,17 @@ def run_analysis_sync(task_id):
 
         result.course_count = len(course_list)
         result.conflict_pairs_count = len(conflict_pairs)
-        result.save(update_fields=['course_count', 'conflict_pairs_count'])
+        result.save(update_fields=["course_count", "conflict_pairs_count"])
 
-        task.status = 'SUCCESS'
+        task.status = "SUCCESS"
         task.progress = 1.0
         task.analyzed_pairs = analyzed
         task.conflict_pairs_found = len(conflict_pairs)
-        task.save(update_fields=['status', 'progress', 'analyzed_pairs',
-                                  'conflict_pairs_found'])
+        task.save(update_fields=["status", "progress", "analyzed_pairs", "conflict_pairs_found"])
 
     except Exception as e:
         tb = traceback.format_exc()
-        print('[CONFLICT ANALYSIS ERROR] task_id=' + task_id + '\n' + tb)
-        task.status = 'FAILED'
+        print("[CONFLICT ANALYSIS ERROR] task_id=" + task_id + "\n" + tb)
+        task.status = "FAILED"
         task.error_message = str(e)
-        task.save(update_fields=['status', 'error_message'])
+        task.save(update_fields=["status", "error_message"])

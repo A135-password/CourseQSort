@@ -36,9 +36,10 @@ def check_hard_constraints(chromosome, course_map, teacher_map, classroom_map):
         if len(genes) > 1:
             tid, week, day, period = key
             t = teacher_map.get(tid)
-            tname = t.name if t and hasattr(t, 'name') else str(tid)
-            violations.append(('TEACHER_CONFLICT',
-                f'教师「{tname}」第{week}周 周{day}第{period}节 同时上{len(genes)}门课'))
+            tname = t.name if t and hasattr(t, "name") else str(tid)
+            violations.append(
+                ("TEACHER_CONFLICT", f"教师「{tname}」第{week}周 周{day}第{period}节 同时上{len(genes)}门课")
+            )
 
     # 教室冲突
     room_slots = defaultdict(list)
@@ -51,13 +52,14 @@ def check_hard_constraints(chromosome, course_map, teacher_map, classroom_map):
     for key, genes in room_slots.items():
         if len(genes) > 1:
             rid, week, day, period = key
-            violations.append(('CLASSROOM_CONFLICT',
-                f'教室#{rid} 第{week}周 周{day}第{period}节 被{len(genes)}门课占用'))
+            violations.append(
+                ("CLASSROOM_CONFLICT", f"教室#{rid} 第{week}周 周{day}第{period}节 被{len(genes)}门课占用")
+            )
 
     return violations
 
 
 def is_feasible(chromosome, course_map, teacher_map, classroom_map):
     violations = check_hard_constraints(chromosome, course_map, teacher_map, classroom_map)
-    severe = [v for v in violations if v[0] in ('TEACHER_CONFLICT', 'CLASSROOM_CONFLICT')]
+    severe = [v for v in violations if v[0] in ("TEACHER_CONFLICT", "CLASSROOM_CONFLICT")]
     return len(severe) == 0

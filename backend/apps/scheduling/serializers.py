@@ -1,24 +1,25 @@
 from rest_framework import serializers
-from apps.courses.models import Course, Teacher, Classroom
-from apps.scheduling.models import SchedulePlan, ScheduleEntry, TaskRecord
+
+from apps.courses.models import Classroom, Course, Teacher
+from apps.scheduling.models import ScheduleEntry, SchedulePlan, TaskRecord
 
 
 class NestedCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class NestedTeacherSerializer(serializers.ModelSerializer):
     class Meta:
         model = Teacher
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class NestedClassroomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classroom
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class ScheduleEntrySerializer(serializers.ModelSerializer):
@@ -28,8 +29,7 @@ class ScheduleEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ScheduleEntry
-        fields = ['id', 'course', 'teacher', 'classroom',
-                  'day_of_week', 'period', 'week', 'student_group_ids']
+        fields = ["id", "course", "teacher", "classroom", "day_of_week", "period", "week", "student_group_ids"]
 
 
 class SchedulePlanListSerializer(serializers.ModelSerializer):
@@ -37,12 +37,11 @@ class SchedulePlanListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SchedulePlan
-        fields = ['id', 'plan_name', 'semester', 'major_ids',
-                  'overall_fitness', 'status', 'created_at', 'created_by']
+        fields = ["id", "plan_name", "semester", "major_ids", "overall_fitness", "status", "created_at", "created_by"]
 
     def get_created_by(self, obj):
         if obj.created_by:
-            profile = getattr(obj.created_by, 'profile', None)
+            profile = getattr(obj.created_by, "profile", None)
             return profile.name if profile else obj.created_by.username
         return None
 
@@ -53,13 +52,22 @@ class SchedulePlanDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SchedulePlan
-        fields = ['id', 'plan_name', 'semester', 'major_ids',
-                  'overall_fitness', 'status', 'algorithm_config',
-                  'created_at', 'created_by', 'entries']
+        fields = [
+            "id",
+            "plan_name",
+            "semester",
+            "major_ids",
+            "overall_fitness",
+            "status",
+            "algorithm_config",
+            "created_at",
+            "created_by",
+            "entries",
+        ]
 
     def get_created_by(self, obj):
         if obj.created_by:
-            profile = getattr(obj.created_by, 'profile', None)
+            profile = getattr(obj.created_by, "profile", None)
             return profile.name if profile else obj.created_by.username
         return None
 
@@ -76,12 +84,19 @@ class TaskStatusSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskRecord
-        fields = ['task_id', 'status', 'progress', 'current_generation',
-                  'best_fitness', 'estimated_time_remaining', 'error_message',
-                  'total_entries']
+        fields = [
+            "task_id",
+            "status",
+            "progress",
+            "current_generation",
+            "best_fitness",
+            "estimated_time_remaining",
+            "error_message",
+            "total_entries",
+        ]
 
     def get_total_entries(self, obj):
-        if obj.plan and obj.status == 'SUCCESS':
+        if obj.plan and obj.status == "SUCCESS":
             return obj.plan.entries.count()
         return 0
 
@@ -92,7 +107,7 @@ class OverrideSerializer(serializers.Serializer):
     period = serializers.IntegerField()
     classroom_id = serializers.IntegerField(required=False)
     teacher_id = serializers.IntegerField(required=False)
-    reason = serializers.CharField(required=False, default='')
+    reason = serializers.CharField(required=False, default="")
 
 
 class PublishSerializer(serializers.Serializer):
