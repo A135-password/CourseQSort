@@ -183,6 +183,12 @@ class StudentCourseApiTests(StudentTestMixin, TestCase):
         self.assertEqual(response.data["status"], "SELECTED")
         self.assertTrue(Enrollment.objects.filter(user=self.user, course=self.available_course).exists())
 
+    def test_course_list_handles_injection_like_keyword_without_server_error(self):
+        response = self.client.get("/api/v1/student/courses/", {"keyword": "' OR 1=1 --"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("results", response.data)
+
 
 class StudentCourseConcurrencyTests(StudentTestMixin, TransactionTestCase):
     def setUp(self):
