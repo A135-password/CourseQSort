@@ -156,4 +156,12 @@ Bootstrap 5（CDN）
 
 ---
 
-> 开发阶段由 [Codex](https://codex.ai) 辅助完成
+## Frontend E2E
+
+```bash
+cd frontend
+npm install
+npm run test:e2e
+```
+
+---
