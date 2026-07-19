@@ -1,18 +1,3 @@
-/**
- * ========================================
- * CourseQSort API Client
- * 排课规划器 — 前端 API 对接层
- * 后端: Django REST Framework + SimpleJWT
- * Base URL: /api/v1/
- * ========================================
- *
- * 双模式设计:
- *   MOCK 模式 (默认) — 使用内置模拟数据，前端可独立预览
- *   API 模式 — 对接真实 Django 后端，需后端服务运行
- *
- * 切换方式: SetMockMode(false) 或在控制台执行
- *   CourseQSortAPI.setMockMode(false)
- */
 
 var CourseQSortAPI = (function () {
     'use strict';
@@ -42,7 +27,12 @@ var CourseQSortAPI = (function () {
     };
 
     // 页面加载时从 localStorage 恢复 JWT 模式（防止页面跳转后 CONFIG 复位导致误判未登录）
-    if (localStorage.getItem(TOKEN_KEYS.ACCESS)) {
+    // 优先读取 sessionStorage 中用户手动选择的登录模式
+    var savedMode = sessionStorage.getItem('loginMode');
+    if (savedMode) {
+        CONFIG.LOGIN_MODE = savedMode;
+        CONFIG.USE_MOCK = (savedMode !== 'jwt');
+    } else if (localStorage.getItem(TOKEN_KEYS.ACCESS)) {
         CONFIG.LOGIN_MODE = 'jwt';
         CONFIG.USE_MOCK = false;
     }
@@ -205,7 +195,10 @@ var CourseQSortAPI = (function () {
 
         for (var mk in mockCallbacks) {
             if (mk.indexOf(':pattern:') === -1) continue;
-            var pattern = mk.split(':pattern:')[1];
+            var parts = mk.split(':pattern:');
+            var patternMethod = parts[0];
+            var pattern = parts[1];
+            if (patternMethod !== method) continue;
             if (matchPath(pathOnly, pattern)) {
                 var matchedId = extractId(pathOnly, pattern);
                 return Promise.resolve(mockCallbacks[mk](handlerArg, matchedId));
@@ -1473,7 +1466,14 @@ var CourseQSortAPI = (function () {
         for (var i = 0; i < MOCK_SCHEDULE_PLANS.length; i++) {
             if (MOCK_SCHEDULE_PLANS[i].id === id) { plan = MOCK_SCHEDULE_PLANS[i]; break; }
         }
-        if (!plan) return {};
+        // Mock 模式下，如果方案不存在（新标签页 JS 上下文丢失），从 MOCK_COURSES 生成
+        if (!plan) {
+            plan = {
+                id: id, plan_name: '预览方案 #' + id, semester: '2026-spring',
+                status: 'DRAFT', overall_fitness: (0.8 + Math.random() * 0.15).toFixed(2),
+                created_at: new Date().toISOString(), published_at: null
+            };
+        }
         // 如果方案已有条目就用已有的，否则从 MOCK_COURSES 生成
         if (!plan.entries || plan.entries.length === 0) {
             var classrooms = ['A101', 'A102', 'B201', 'B203', 'C301', 'D101', 'D202', 'E401'];
@@ -1565,8 +1565,9 @@ var CourseQSortAPI = (function () {
     });
 
     var _mockPlanEntryId = 1;
+    var _mockTaskStore = {};
+
     registerMock('POST', '/admin/schedule/generate/', function (body) {
-        // 从 MOCK_COURSES 生成真实的排课条目
         var classrooms = ['A101', 'A102', 'B201', 'B203', 'C301', 'D101', 'D202', 'E401'];
         var planId = Date.now();
         var entries = [];
@@ -1598,11 +1599,27 @@ var CourseQSortAPI = (function () {
         };
         MOCK_SCHEDULE_PLANS.unshift(newPlan);
         var taskId = 'mock_task_' + planId;
+        // 记录任务开始时间，模拟 3-5 秒的渐进式生成
+        _mockTaskStore[taskId] = { startTime: Date.now(), planId: planId, totalEntries: entries.length };
         return { task_id: taskId, status: 'PENDING' };
     });
 
     registerMockPattern('GET', '/admin/schedule/tasks/{id}/', function (body, vars) {
-        return { task_id: vars.id, status: 'SUCCESS', progress: 1.0, current_generation: 500, best_fitness: 0.93, total_entries: 156, plan_id: 3 };
+        var taskId = vars.id;
+        var stored = _mockTaskStore[taskId];
+        if (!stored) {
+            // 新标签页：直接返回完成
+            return { task_id: taskId, status: 'SUCCESS', progress: 1.0, current_generation: 200 + Math.floor(Math.random() * 300), best_fitness: (0.85 + Math.random() * 0.12).toFixed(2), total_entries: 156 };
+        }
+        var elapsed = (Date.now() - stored.startTime) / 1000;
+        var duration = 3 + Math.random() * 2; // 3-5 秒完成
+        var progress = Math.min(1.0, elapsed / duration);
+        var gen = Math.floor(progress * (200 + Math.floor(Math.random() * 300)));
+        var fitness = (0.5 + progress * 0.4 + Math.random() * 0.05).toFixed(2);
+        if (progress >= 1.0) {
+            return { task_id: taskId, status: 'SUCCESS', progress: 1.0, current_generation: gen, best_fitness: parseFloat(fitness), total_entries: stored.totalEntries };
+        }
+        return { task_id: taskId, status: 'RUNNING', progress: progress, current_generation: gen, best_fitness: parseFloat(fitness), total_entries: 0 };
     });
 
     registerMock('POST', '/admin/conflict-analysis/run/', function () {

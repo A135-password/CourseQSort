@@ -1,10 +1,3 @@
-// ================================================================
-// CourseQSort 选课系统 — 前端 UI 控制器
-// 数据来源: CourseQSortAPI (支持 Mock / 真实后端双模式)
-// ================================================================
-
-// ======================== 登录检查 ========================
-
 (function checkLogin() {
     if (!CourseQSortAPI.isMockMode() && !CourseQSortAPI.isAuthenticated()) {
         window.location.replace('index.html');
