@@ -230,7 +230,7 @@ def _make_course_schedule(
 
 
 def init_population(courses, classrooms, teachers, config):
-    pop_size = min(int(_get(config, "population_size", 200) or 200), 300)
+    pop_size = min(int(_get(config, "population_size", 32) or 32), 300)
     total_weeks = int(_get(config, "total_weeks", 18) or 18)
     period_count = int(_get(config, "timetable_periods", 0)) or 11
     default_sl = int(_get(config, "session_length", 2) or 2)
@@ -411,8 +411,8 @@ def mutate(chromosome, course_list, teacher_list, classrooms, config, mutation_r
 
 
 def run_genetic(courses, classrooms, protected_slots, config, progress_callback=None):
-    pop_size = min(int(_get(config, "population_size", 200) or 200), 300)
-    max_gen = int(_get(config, "max_generations", 500) or 500)
+    pop_size = min(int(_get(config, "population_size", 32) or 32), 300)
+    max_gen = int(_get(config, "max_generations", 12) or 12)
     mutation_rate = float(_get(config, "mutation_rate", 0.05) or 0.05)
     crossover_rate = float(_get(config, "crossover_rate", 0.85) or 0.85)
 
