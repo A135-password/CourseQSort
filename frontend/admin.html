@@ -144,7 +144,14 @@
                 <div class="admin-section d-none" id="section-conflict">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="mb-0">冲突预分析</h4>
-                        <button class="btn btn-danger btn-sm" id="conflict-run-btn"><i class="bi bi-exclamation-triangle"></i> 运行分析</button>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label small mb-0">最低冲突人数：</label>
+                            <select class="form-select form-select-sm" id="conflict-threshold" style="width:80px;">
+                                <option value="1">1</option><option value="5">5</option><option value="10" selected>10</option>
+                                <option value="20">20</option><option value="30">30</option><option value="50">50</option>
+                            </select>
+                            <button class="btn btn-danger btn-sm" id="conflict-run-btn"><i class="bi bi-exclamation-triangle"></i> 运行分析</button>
+                        </div>
                     </div>
                     <div id="conflict-task-status" class="alert d-none" style="display:none;">
                         <div class="d-flex justify-content-between align-items-center mb-2">

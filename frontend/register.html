@@ -135,7 +135,13 @@
             submitBtn.disabled = false;
             submitBtn.textContent = '注册';
 
-            CourseQSortAPI.token.set(data.access, data.refresh);
+            var isMock = CourseQSortAPI.isMockMode();
+            if (isMock) {
+                // 预览模式：不调用 setTokens（假 token 会错误关闭 mock 模式）
+                sessionStorage.setItem('loginMode', 'mock');
+            } else {
+                CourseQSortAPI.token.set(data.access, data.refresh);
+            }
             sessionStorage.setItem('userName', data.user.name || username);
             sessionStorage.setItem('userRole', data.user.role || currentRole);
             if (currentRole === 'TEACHER') {

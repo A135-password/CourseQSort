@@ -192,7 +192,9 @@
             CourseQSortAPI.auth.login(username, password, currentRole)
                 .then(function(data) {
                     console.log('[LOGIN] success: role=' + data.user.role + ' name=' + data.user.name);
-                    CourseQSortAPI.token.set(data.access, data.refresh);
+                    if (!CourseQSortAPI.isMockMode()) {
+                        CourseQSortAPI.token.set(data.access, data.refresh);
+                    }
                     var role = data.user.role || currentRole;
                     var displayName = data.user.name || username;
                     sessionStorage.setItem('userName', displayName);

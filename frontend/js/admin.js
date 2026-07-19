@@ -1046,7 +1046,7 @@ document.getElementById('conflict-run-btn').addEventListener('click',async funct
     document.getElementById('conflict-chart-area').innerHTML='';
 
     try{
-        var r=await CourseQSortAPI.admin.runConflictAnalysis({semester:'2026-spring',course_ids:[],threshold:30});
+        var r=await CourseQSortAPI.admin.runConflictAnalysis({semester:'2026-spring',course_ids:[],threshold:parseInt(document.getElementById('conflict-threshold').value)||10});
         var taskId=r.task_id;
         if(!taskId){
             statusEl.className='alert alert-danger';textEl.textContent='分析失败：未获取到任务ID';
