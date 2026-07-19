@@ -98,7 +98,7 @@
                     </ul>
                     <div id="teacher-dept-filter" class="d-none mb-2"><div class="row g-2 align-items-center"><div class="col-auto"><label class="form-label small mb-0">筛选学院：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="teacher-filter-dept"><option value="">全部学院</option></select></div><div class="col-auto"><small class="text-muted" id="teacher-filter-hint"></small></div></div></div>
                     <div id="student-filter" class="d-none mb-2"><div class="row g-2 align-items-center"><div class="col-auto"><label class="form-label small mb-0">年级：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="student-filter-grade"><option value="">全部年级</option></select></div><div class="col-auto"><label class="form-label small mb-0">专业：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="student-filter-major"><option value="">全部专业</option></select></div><div class="col-auto"><label class="form-label small mb-0">班级：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="student-filter-class"><option value="">全部班级</option></select></div><div class="col-auto"><small class="text-muted" id="student-filter-hint"></small></div></div></div>
-                    <div id="classgroup-major-filter" class="d-none mb-2"><div class="row g-2 align-items-center"><div class="col-auto"><label class="form-label small mb-0">筛选专业：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="classgroup-filter-major"></select></div><div class="col-auto"><small class="text-muted" id="classgroup-filter-hint"></small></div></div></div>
+                    <div id="classgroup-major-filter" class="d-none mb-2"><div class="row g-2 align-items-center"><div class="col-auto"><label class="form-label small mb-0">年级：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="classgroup-filter-grade"><option value="">全部年级</option></select></div><div class="col-auto"><label class="form-label small mb-0">专业：</label></div><div class="col-auto"><select class="form-select form-select-sm" id="classgroup-filter-major"></select></div><div class="col-auto"><small class="text-muted" id="classgroup-filter-hint"></small></div></div></div>
                     <div id="resource-content"><div class="table-responsive"><table class="table table-sm"><tbody id="resource-table-body"></tbody></table></div></div>
                     <div class="d-flex justify-content-between align-items-center mt-2" id="resource-pagination-bar">
                         <small class="text-muted" id="resource-pagination-info"></small>
@@ -144,7 +144,15 @@
                 <div class="admin-section d-none" id="section-conflict">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="mb-0">冲突预分析</h4>
-                        <button class="btn btn-danger btn-sm" id="conflict-run-btn"><i class="bi bi-exclamation-triangle"></i> 运行分析</button>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="form-label small mb-0" title="只显示同时受影响学生数 ≥ 此值的冲突课程对，数值越小结果越多">ⓘ 最低冲突人数：</label>
+                            <select class="form-select form-select-sm" id="conflict-threshold" style="width:80px;">
+                                <option value="1">1</option><option value="5">5</option><option value="10" selected>10</option>
+                                <option value="20">20</option><option value="30">30</option><option value="50">50</option>
+                            </select>
+                            <button class="btn btn-danger btn-sm" id="conflict-run-btn"><i class="bi bi-exclamation-triangle"></i> 运行分析</button>
+                        </div>
+                        <small class="text-muted d-block mt-1">两门课上课时间重叠时，会同时影响选了这两门课的学生。阈值越低结果越多（最少 1 人即报告），越高只看影响面大的冲突。</small>
                     </div>
                     <div id="conflict-task-status" class="alert d-none" style="display:none;">
                         <div class="d-flex justify-content-between align-items-center mb-2">
