@@ -195,7 +195,10 @@ var CourseQSortAPI = (function () {
 
         for (var mk in mockCallbacks) {
             if (mk.indexOf(':pattern:') === -1) continue;
-            var pattern = mk.split(':pattern:')[1];
+            var parts = mk.split(':pattern:');
+            var patternMethod = parts[0];
+            var pattern = parts[1];
+            if (patternMethod !== method) continue;
             if (matchPath(pathOnly, pattern)) {
                 var matchedId = extractId(pathOnly, pattern);
                 return Promise.resolve(mockCallbacks[mk](handlerArg, matchedId));
