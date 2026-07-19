@@ -21,7 +21,7 @@ def run(plan, progress_callback=None):
         progress_callback(0.0, 0, 0.0)
 
     # ---- 加载课程（不按学期过滤，包含数据库中所有课程）----
-    courses_qs = Course.objects.all().prefetch_related("schedule_items", "teachers")
+    courses_qs = Course.objects.all().prefetch_related("teachers")
     if major_ids:
         courses_qs = courses_qs.filter(major_id__in=major_ids)
     courses = list(courses_qs)
@@ -35,6 +35,12 @@ def run(plan, progress_callback=None):
     total_weeks = max(1, min(total_weeks, 30))
 
     classrooms = list(Classroom.objects.all())
+    course_map = {course.id: course for course in courses}
+    classroom_map = {classroom.id: classroom for classroom in classrooms}
+    teacher_map = {}
+    for course in courses:
+        for teacher in course.teachers.all():
+            teacher_map.setdefault(teacher.id, teacher)
 
     # ---- 清除旧条目 ----
     ScheduleEntry.objects.filter(plan=plan).delete()
@@ -66,21 +72,12 @@ def run(plan, progress_callback=None):
     for gene in flat_genes:
         course_id, week, day, start_p, sl, teacher_id, classroom_id = gene
 
-        course = next((c for c in courses if c.id == course_id), None)
+        course = course_map.get(course_id)
         if not course:
             continue
 
-        teacher = None
-        if teacher_id:
-            for c in courses:
-                t = c.teachers.filter(id=teacher_id).first()
-                if t:
-                    teacher = t
-                    break
-
-        classroom = None
-        if classroom_id:
-            classroom = next((cr for cr in classrooms if cr.id == classroom_id), None)
+        teacher = teacher_map.get(teacher_id) if teacher_id else None
+        classroom = classroom_map.get(classroom_id) if classroom_id else None
 
         for p in range(start_p, start_p + sl):
             entries.append(
