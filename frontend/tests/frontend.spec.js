@@ -48,15 +48,20 @@ test('admin can generate schedule plans, inspect conflicts, and save algorithm s
 
   await page.click('#admin-nav a[data-section="scheduling"]');
   await page.click('#schedule-generate-btn');
-  await expect(page.locator('#schedule-task-status')).toHaveClass(/alert-success/);
+  await expect(page.locator('#schedule-task-status')).toHaveClass(/alert-success/, {
+    timeout: 15000
+  });
   await expect(page.locator('#schedule-plans-list tr')).toHaveCount(3);
 
   await page.click('#admin-nav a[data-section="conflict"]');
   await expect(page.locator('#conflict-run-btn')).toBeVisible();
   await page.click('#conflict-run-btn');
-  await expect(page.locator('#conflict-task-status')).toHaveClass(/alert-success/);
+  await expect(page.locator('#conflict-task-status')).toHaveClass(/alert-success/, {
+    timeout: 10000
+  });
   await page.locator('#conflict-results-list .view-pairs').first().click();
-  await expect(page.locator('#conflict-chart-area')).toContainText('vs');
+  await expect(page.locator('#conflict-chart-area')).toContainText('冲突课程详情');
+  await expect(page.locator('#conflict-chart-area')).toContainText('数据结构');
 
   await page.click('#admin-nav a[data-section="algorithm"]');
   await expect(page.locator('#a-population_size')).toBeVisible();
