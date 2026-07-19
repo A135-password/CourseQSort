@@ -72,10 +72,18 @@ class GenerateSerializer(serializers.Serializer):
 
 
 class TaskStatusSerializer(serializers.ModelSerializer):
+    total_entries = serializers.SerializerMethodField()
+
     class Meta:
         model = TaskRecord
         fields = ['task_id', 'status', 'progress', 'current_generation',
-                  'best_fitness', 'estimated_time_remaining', 'error_message']
+                  'best_fitness', 'estimated_time_remaining', 'error_message',
+                  'total_entries']
+
+    def get_total_entries(self, obj):
+        if obj.plan and obj.status == 'SUCCESS':
+            return obj.plan.entries.count()
+        return 0
 
 
 class OverrideSerializer(serializers.Serializer):

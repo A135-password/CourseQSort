@@ -58,6 +58,23 @@ class RegisterView(APIView):
         from apps.accounts.serializers import LoginSerializer
         profile = getattr(user, 'profile', None)
         refresh = RefreshToken.for_user(user)
+
+        # 获取教师/学生 ID
+        teacher_id = None
+        student_id = None
+        teacher_dept = None
+        if profile and profile.role == 'TEACHER':
+            from apps.courses.models import Teacher
+            teacher = Teacher.objects.filter(user=user).first()
+            if teacher:
+                teacher_id = teacher.id
+                teacher_dept = teacher.department or ''
+        elif profile and profile.role == 'STUDENT':
+            from apps.courses.models import Student
+            student = Student.objects.filter(user=user).first()
+            if student:
+                student_id = student.id
+
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -66,6 +83,9 @@ class RegisterView(APIView):
                 'username': user.username,
                 'role': profile.role if profile else 'STUDENT',
                 'name': profile.name if profile else user.username,
+                'teacher_id': teacher_id,
+                'teacher_dept': teacher_dept,
+                'student_id': student_id,
             },
             'detail': '注册成功',
         }, status=status.HTTP_201_CREATED)
