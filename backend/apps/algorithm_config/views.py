@@ -15,7 +15,7 @@ class AlgorithmConfigRetrieveUpdateView(APIView):
         config = self._get_config()
         serializer = AlgorithmConfigSerializer(config)
         data = serializer.data
-        data['updated_by'] = serializer.get_updated_by(config)
+        data["updated_by"] = serializer.get_updated_by(config)
         return Response(data)
 
     def put(self, request):
@@ -26,7 +26,7 @@ class AlgorithmConfigRetrieveUpdateView(APIView):
         serializer.save(updated_by=request.user)
         data = serializer.data
         config.refresh_from_db()
-        data['updated_by'] = AlgorithmConfigSerializer().get_updated_by(config)
+        data["updated_by"] = AlgorithmConfigSerializer().get_updated_by(config)
         return Response(data)
 
     def patch(self, request):
@@ -35,7 +35,6 @@ class AlgorithmConfigRetrieveUpdateView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         serializer.save(updated_by=request.user)
-        data = dict(serializer.data)
         config.refresh_from_db()
         serializer2 = AlgorithmConfigSerializer(config)
         return Response(serializer2.data)

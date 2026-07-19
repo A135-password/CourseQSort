@@ -1,6 +1,6 @@
 import random
-import math
 from collections import defaultdict
+
 from .constraints import check_hard_constraints
 from .fitness import evaluate_fitness
 
@@ -24,14 +24,14 @@ def _random_assignment(course_id, course, classrooms_by_type, teacher_pool):
     if teacher_pool:
         teacher_id = random.choice(teacher_pool).id
     classroom_id = None
-    req_types = _get(course, 'required_classroom_types', []) or []
+    req_types = _get(course, "required_classroom_types", []) or []
     key = tuple(sorted(req_types)) if req_types else None
     pool = classrooms_by_type.get(key, [])
     if not pool:
         pool = [r for rooms in classrooms_by_type.values() for r in rooms]
     if pool:
-        needed = _get(course, 'expected_student_count', 0) or 0
-        adequate = [r for r in pool if (r.capacity if hasattr(r, 'capacity') else 999) >= needed]
+        needed = _get(course, "expected_student_count", 0) or 0
+        adequate = [r for r in pool if (r.capacity if hasattr(r, "capacity") else 999) >= needed]
         if adequate:
             classroom_id = random.choice(adequate).id
         else:
@@ -42,9 +42,9 @@ def _random_assignment(course_id, course, classrooms_by_type, teacher_pool):
 def init_population(courses, classrooms, teachers, pop_size):
     classrooms_by_type = defaultdict(list)
     for room in classrooms:
-        equip = tuple(sorted(_get(room, 'equipment_types', []) or []))
+        equip = tuple(sorted(_get(room, "equipment_types", []) or []))
         if not equip:
-            equip = ('default',)
+            equip = ("default",)
         classrooms_by_type[equip].append(room)
 
     teacher_pool = list(teachers)
@@ -57,15 +57,12 @@ def init_population(courses, classrooms, teachers, pop_size):
             items = list(course.schedule_items.all())
             num_slots = max(1, len(items))
             for _ in range(num_slots):
-                chromosome.append(_random_assignment(
-                    cid, course, classrooms_by_type, teacher_pool
-                ))
+                chromosome.append(_random_assignment(cid, course, classrooms_by_type, teacher_pool))
         population.append(chromosome)
     return population
 
 
-def evaluate_population(population, course_list, teacher_list, classroom_list,
-                        protected_slots, config):
+def evaluate_population(population, course_list, teacher_list, classroom_list, protected_slots, config):
     course_map = {c.id: c for c in course_list}
     teacher_map = {t.id: t for t in teacher_list}
     classroom_map = {cr.id: cr for cr in classroom_list}
@@ -73,14 +70,10 @@ def evaluate_population(population, course_list, teacher_list, classroom_list,
     scores = []
     for chromosome in population:
         try:
-            fitness, details = evaluate_fitness(
-                chromosome, course_map, [], protected_slots, config
-            )
-            violations = check_hard_constraints(
-                chromosome, course_map, teacher_map, classroom_map
-            )
+            fitness, details = evaluate_fitness(chromosome, course_map, [], protected_slots, config)
+            violations = check_hard_constraints(chromosome, course_map, teacher_map, classroom_map)
             if violations:
-                severe = sum(1 for v in violations if v[0] in ('TEACHER_CONFLICT', 'CLASSROOM_CONFLICT'))
+                severe = sum(1 for v in violations if v[0] in ("TEACHER_CONFLICT", "CLASSROOM_CONFLICT"))
                 minor = len(violations) - severe
                 penalty = severe * 0.3 + minor * 0.05
                 penalty = min(0.9, penalty)
@@ -126,9 +119,9 @@ def mutate(chromosome, course_list, teacher_list, classrooms, mutation_rate=0.05
 
     classrooms_by_type = defaultdict(list)
     for room in classrooms:
-        equip = tuple(sorted(_get(room, 'equipment_types', []) or []))
+        equip = tuple(sorted(_get(room, "equipment_types", []) or []))
         if not equip:
-            equip = ('default',)
+            equip = ("default",)
         classrooms_by_type[equip].append(room)
 
     mutated = []
@@ -140,7 +133,7 @@ def mutate(chromosome, course_list, teacher_list, classrooms, mutation_rate=0.05
         if random.random() < mutation_rate:
             course = course_map.get(course_id)
             if course:
-                req_types = tuple(sorted(_get(course, 'required_classroom_types', []) or []))
+                req_types = tuple(sorted(_get(course, "required_classroom_types", []) or []))
                 req_key = req_types if req_types else None
                 pool = classrooms_by_type.get(req_key, [])
                 if not pool:
@@ -154,10 +147,10 @@ def mutate(chromosome, course_list, teacher_list, classrooms, mutation_rate=0.05
 
 
 def run_genetic(courses, classrooms, protected_slots, config, progress_callback=None):
-    pop_size = int(_get(config, 'population_size', 200) or 200)
-    max_gen = int(_get(config, 'max_generations', 500) or 500)
-    mutation_rate = float(_get(config, 'mutation_rate', 0.05) or 0.05)
-    crossover_rate = float(_get(config, 'crossover_rate', 0.85) or 0.85)
+    pop_size = int(_get(config, "population_size", 200) or 200)
+    max_gen = int(_get(config, "max_generations", 500) or 500)
+    mutation_rate = float(_get(config, "mutation_rate", 0.05) or 0.05)
+    crossover_rate = float(_get(config, "crossover_rate", 0.85) or 0.85)
 
     course_list = list(courses)
     classroom_list = list(classrooms)
@@ -170,7 +163,7 @@ def run_genetic(courses, classrooms, protected_slots, config, progress_callback=
     teacher_list = list(teacher_set.values())
 
     if not course_list:
-        return [], 0.0, {'generations': 0, 'message': 'no courses'}
+        return [], 0.0, {"generations": 0, "message": "no courses"}
 
     pop_size = min(pop_size, 200)
     population = init_population(course_list, classroom_list, teacher_list, pop_size)
@@ -180,14 +173,9 @@ def run_genetic(courses, classrooms, protected_slots, config, progress_callback=
     no_improve = 0
 
     for gen in range(max_gen):
-        scores = evaluate_population(
-            population, course_list, teacher_list, classroom_list,
-            protected_slots, config
-        )
+        scores = evaluate_population(population, course_list, teacher_list, classroom_list, protected_slots, config)
 
         gen_best = max(s[0] for s in scores)
-        gen_avg = sum(s[0] for s in scores) / max(len(scores), 1)
-
         if gen_best > best_fitness:
             best_fitness = gen_best
             best_idx = max(range(len(scores)), key=lambda i: scores[i][0])
@@ -200,9 +188,7 @@ def run_genetic(courses, classrooms, protected_slots, config, progress_callback=
             progress_callback((gen + 1) / max_gen, gen + 1, best_fitness)
 
         elite_count = max(2, pop_size // 20)
-        sorted_indices = sorted(
-            range(len(scores)), key=lambda i: scores[i][0], reverse=True
-        )
+        sorted_indices = sorted(range(len(scores)), key=lambda i: scores[i][0], reverse=True)
         new_population = [population[i][:] for i in sorted_indices[:elite_count]]
 
         while len(new_population) < pop_size:
@@ -229,7 +215,11 @@ def run_genetic(courses, classrooms, protected_slots, config, progress_callback=
     if best_chromosome is None:
         best_chromosome = population[0][:]
 
-    return best_chromosome, best_fitness, {
-        'generations': gen + 1,
-        'best_fitness': round(best_fitness, 4),
-    }
+    return (
+        best_chromosome,
+        best_fitness,
+        {
+            "generations": gen + 1,
+            "best_fitness": round(best_fitness, 4),
+        },
+    )

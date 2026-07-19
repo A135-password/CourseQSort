@@ -1,9 +1,9 @@
 import io
-import uuid
+
 import openpyxl
 from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework import viewsets, status
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -11,11 +11,13 @@ from rest_framework.response import Response
 from apps.accounts.permissions import IsAdminUser
 from apps.common.pagination import PageNumberPagination
 from apps.courses.models import Course
-from apps.scheduling.models import SchedulePlan, ScheduleEntry, TaskRecord
+from apps.scheduling.models import ScheduleEntry, SchedulePlan, TaskRecord
 from apps.scheduling.serializers import (
-    SchedulePlanListSerializer, SchedulePlanDetailSerializer,
-    ScheduleEntrySerializer, GenerateSerializer,
-    TaskStatusSerializer, OverrideSerializer,
+    GenerateSerializer,
+    OverrideSerializer,
+    SchedulePlanDetailSerializer,
+    SchedulePlanListSerializer,
+    TaskStatusSerializer,
 )
 
 
@@ -28,28 +30,32 @@ class GenerateView(viewsets.ViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         plan = SchedulePlan.objects.create(
-            plan_name=serializer.validated_data['plan_name'],
-            semester=serializer.validated_data['semester'],
-            major_ids=serializer.validated_data['major_ids'],
-            algorithm_config=serializer.validated_data.get('algorithm_config', {}),
-            status='DRAFT',
+            plan_name=serializer.validated_data["plan_name"],
+            semester=serializer.validated_data["semester"],
+            major_ids=serializer.validated_data["major_ids"],
+            algorithm_config=serializer.validated_data.get("algorithm_config", {}),
+            status="DRAFT",
             created_by=request.user,
         )
 
         task = TaskRecord.objects.create(
             plan=plan,
-            status='PENDING',
+            status="PENDING",
             progress=0.0,
         )
 
         from apps.scheduling.tasks import run_generate_sync
+
         run_generate_sync(str(task.task_id))
 
         task.refresh_from_db()
-        return Response({
-            'task_id': str(task.task_id),
-            'status': task.status,
-        }, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {
+                "task_id": str(task.task_id),
+                "status": task.status,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class TaskStatusView(viewsets.ViewSet):
@@ -59,11 +65,11 @@ class TaskStatusView(viewsets.ViewSet):
         try:
             task = TaskRecord.objects.get(task_id=pk)
         except TaskRecord.DoesNotExist:
-            return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
         serializer = TaskStatusSerializer(task)
         data = serializer.data
-        if task.plan and task.status == 'SUCCESS':
-            data['plan_id'] = task.plan.id
+        if task.plan and task.status == "SUCCESS":
+            data["plan_id"] = task.plan.id
         return Response(data)
 
 
@@ -73,37 +79,33 @@ class PlanViewSet(viewsets.ModelViewSet):
     pagination_class = PageNumberPagination
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return SchedulePlanListSerializer
         return SchedulePlanDetailSerializer
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if self.action == 'list':
+        if self.action == "list":
             return qs
-        return qs.prefetch_related(
-            'entries__course', 'entries__teacher', 'entries__classroom'
-        )
+        return qs.prefetch_related("entries__course", "entries__teacher", "entries__classroom")
 
     def destroy(self, request, *args, **kwargs):
         plan = self.get_object()
         plan.delete()
-        return Response({'detail': '方案已删除'}, status=status.HTTP_200_OK)
+        return Response({"detail": "方案已删除"}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def evaluation(self, request, pk=None):
         plan = self.get_object()
-        entries = plan.entries.select_related('course').all()
+        entries = plan.entries.select_related("course").all()
         students = set()
-        daily_count = {'monday': 0, 'tuesday': 0, 'wednesday': 0,
-                       'thursday': 0, 'friday': 0}
-        day_map = {1: 'monday', 2: 'tuesday', 3: 'wednesday',
-                   4: 'thursday', 5: 'friday'}
+        daily_count = {"monday": 0, "tuesday": 0, "wednesday": 0, "thursday": 0, "friday": 0}
+        day_map = {1: "monday", 2: "tuesday", 3: "wednesday", 4: "thursday", 5: "friday"}
 
         for e in entries:
-            day_key = day_map.get(e.day_of_week, 'monday')
+            day_key = day_map.get(e.day_of_week, "monday")
             daily_count[day_key] += 1
-            for sid in (e.student_group_ids or []):
+            for sid in e.student_group_ids or []:
                 students.add(sid)
 
         total_hours = sum(daily_count.values())
@@ -112,111 +114,110 @@ class PlanViewSet(viewsets.ModelViewSet):
         variance = sum((h - avg) ** 2 for h in hours_list) / 5 if total_hours else 0
 
         from apps.protected_slots.models import ProtectedSlot
+
         protected_slots = ProtectedSlot.objects.all()
         occupied = 0
         for e in entries:
             for ps in protected_slots:
-                if (e.day_of_week == ps.day_of_week
-                        and ps.start_period <= e.period <= ps.end_period):
+                if e.day_of_week == ps.day_of_week and ps.start_period <= e.period <= ps.end_period:
                     occupied += 1
                     break
 
-        return Response({
-            'plan_id': plan.id,
-            'overall_fitness': plan.overall_fitness or 0.0,
-            'daily_hour_variance': round(variance, 2),
-            'max_daily_hours': max(hours_list) if hours_list else 0,
-            'min_daily_hours': min(hours_list) if hours_list else 0,
-            'student_count': len(students) or entries.count(),
-            'class_count': entries.count(),
-            'daily_distribution': daily_count,
-            'total_course_hours': total_hours,
-            'protected_slot_occupied': occupied,
-            'hard_constraint_violations': [],
-        })
+        return Response(
+            {
+                "plan_id": plan.id,
+                "overall_fitness": plan.overall_fitness or 0.0,
+                "daily_hour_variance": round(variance, 2),
+                "max_daily_hours": max(hours_list) if hours_list else 0,
+                "min_daily_hours": min(hours_list) if hours_list else 0,
+                "student_count": len(students) or entries.count(),
+                "class_count": entries.count(),
+                "daily_distribution": daily_count,
+                "total_course_hours": total_hours,
+                "protected_slot_occupied": occupied,
+                "hard_constraint_violations": [],
+            }
+        )
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def publish(self, request, pk=None):
         plan = self.get_object()
-        if plan.status == 'PUBLISHED':
-            return Response({'detail': 'Plan already published'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        plan.status = 'PUBLISHED'
+        if plan.status == "PUBLISHED":
+            return Response({"detail": "Plan already published"}, status=status.HTTP_400_BAD_REQUEST)
+        plan.status = "PUBLISHED"
         plan.published_at = timezone.now()
-        plan.save(update_fields=['status', 'published_at'])
-        return Response({
-            'plan_id': plan.id,
-            'status': 'PUBLISHED',
-            'published_at': plan.published_at.isoformat(),
-        })
+        plan.save(update_fields=["status", "published_at"])
+        return Response(
+            {
+                "plan_id": plan.id,
+                "status": "PUBLISHED",
+                "published_at": plan.published_at.isoformat(),
+            }
+        )
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def export(self, request, pk=None):
         plan = self.get_object()
-        entries = plan.entries.select_related(
-            'course', 'teacher', 'classroom'
-        ).all()
+        entries = plan.entries.select_related("course", "teacher", "classroom").all()
 
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = plan.plan_name[:30]
-        ws.append(['课程名称', '课程编码', '教师', '教室', '星期', '节次'])
+        ws.append(["课程名称", "课程编码", "教师", "教室", "星期", "节次"])
 
-        day_names = {1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五'}
+        day_names = {1: "周一", 2: "周二", 3: "周三", 4: "周四", 5: "周五"}
         for e in entries:
-            ws.append([
-                e.course.name if e.course else '',
-                e.course.code if e.course else '',
-                e.teacher.name if e.teacher else '',
-                e.classroom.name if e.classroom else '',
-                day_names.get(e.day_of_week, str(e.day_of_week)),
-                f'第{e.period}节',
-            ])
+            ws.append(
+                [
+                    e.course.name if e.course else "",
+                    e.course.code if e.course else "",
+                    e.teacher.name if e.teacher else "",
+                    e.classroom.name if e.classroom else "",
+                    day_names.get(e.day_of_week, str(e.day_of_week)),
+                    f"第{e.period}节",
+                ]
+            )
 
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
         return HttpResponse(
             output.read(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={
-                'Content-Disposition': f'attachment; filename="{plan.plan_name}.xlsx"'
-            },
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{plan.plan_name}.xlsx"'},
         )
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def override(self, request, pk=None):
         plan = self.get_object()
-        if plan.status == 'PUBLISHED':
-            return Response({'detail': 'Cannot override a published plan'},
-                            status=status.HTTP_400_BAD_REQUEST)
+        if plan.status == "PUBLISHED":
+            return Response({"detail": "Cannot override a published plan"}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = OverrideSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        course = Course.objects.filter(id=data['course_id']).first()
+        course = Course.objects.filter(id=data["course_id"]).first()
         if not course:
-            return Response({'detail': 'Course not found'},
-                            status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
         entry, _ = ScheduleEntry.objects.update_or_create(
             plan=plan,
             course=course,
             defaults={
-                'day_of_week': data['day_of_week'],
-                'period': data['period'],
-                'classroom_id': data.get('classroom_id'),
-                'teacher_id': data.get('teacher_id'),
+                "day_of_week": data["day_of_week"],
+                "period": data["period"],
+                "classroom_id": data.get("classroom_id"),
+                "teacher_id": data.get("teacher_id"),
+            },
+        )
+        return Response(
+            {
+                "item_id": entry.id,
+                "evaluation": {
+                    "overall_fitness": plan.overall_fitness or 0.0,
+                    "adjusted": True,
+                },
             }
         )
-
-        from apps.scheduling.serializers import ScheduleEntrySerializer as EntrySer
-        return Response({
-            'item_id': entry.id,
-            'evaluation': {
-                'overall_fitness': plan.overall_fitness or 0.0,
-                'adjusted': True,
-            }
-        })
