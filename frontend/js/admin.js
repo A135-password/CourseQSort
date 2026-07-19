@@ -497,13 +497,15 @@ var _lockedClassGroupMajorId = null;
 var _lockedClassGroupMajorName = '';
 
 // ---- 通用辅助：年级下拉 + 班级级联 ----
-var GRADE_OPTIONS = ['2020','2021','2022','2023','2024','2025','2026','2027'];
 function buildGradeOptions(selectedGrade) {
     selectedGrade = selectedGrade || '';
-    return '<option value="">-- 选择年级 --</option>' +
-        GRADE_OPTIONS.map(function(g) {
-            return '<option value="' + g + '"' + (g === selectedGrade ? ' selected' : '') + '>' + g + '级</option>';
-        }).join('');
+    var currentYear = new Date().getFullYear();
+    var html = '<option value="">-- 选择年级 --</option>';
+    for (var y = currentYear + 2; y >= 1970; y--) {
+        var ys = String(y);
+        html += '<option value="' + ys + '"' + (ys === selectedGrade ? ' selected' : '') + '>' + ys + '级</option>';
+    }
+    return html;
 }
 
 function loadClassesIntoSelect(majorId, selectEl, selectedClassGroupId) {
@@ -807,8 +809,10 @@ async function loadResTable(){
             if (filterDiv) filterDiv.classList.remove('d-none');
             // 加载专业到筛选下拉
             var filterSel = document.getElementById('classgroup-filter-major');
+            var filterGrade = document.getElementById('classgroup-filter-grade');
             var filterHint = document.getElementById('classgroup-filter-hint');
             var savedFilterMajorId = sessionStorage.getItem('classgroupFilterMajor') || '';
+            var savedFilterGrade = sessionStorage.getItem('classgroupFilterGrade') || '';
             var majorsData = await CourseQSortAPI.admin.getMajors();
             var majors = majorsData.results || [];
             filterSel.innerHTML = '<option value="">-- 选择专业 --</option>' +
@@ -816,6 +820,7 @@ async function loadResTable(){
                     var sel = (String(m.id) === savedFilterMajorId) ? ' selected' : '';
                     return '<option value="' + m.id + '"' + sel + '>' + m.name + '</option>';
                 }).join('');
+            filterGrade.innerHTML = buildGradeOptions(savedFilterGrade);
 
             // 渲染班级列表的辅助函数
             function renderClassGroupTable(majorId) {
@@ -826,7 +831,13 @@ async function loadResTable(){
                     return;
                 }
                 CourseQSortAPI.admin.getMajorClasses(parseInt(majorId)).then(function(classes) {
-                    resPageData = Array.isArray(classes) ? classes : (classes.results || []); _curResRender = function() { var items = getResPageItems();
+                    var allData = Array.isArray(classes) ? classes : (classes.results || []);
+                    // 按年级筛选
+                    var selGrade = filterGrade.value;
+                    if (selGrade) {
+                        allData = allData.filter(function(cg) { return (cg.grade || '') === selGrade; });
+                    }
+                    resPageData = allData; _curResRender = function() { var items = getResPageItems();
                     addBtn.classList.remove('d-none');
                     addBtn.textContent = '新增班级';
                     var majorName = filterSel.options[filterSel.selectedIndex].text;
@@ -859,6 +870,10 @@ async function loadResTable(){
                 var mid = this.value;
                 sessionStorage.setItem('classgroupFilterMajor', mid);
                 renderClassGroupTable(mid);
+            };
+            filterGrade.onchange = function() {
+                sessionStorage.setItem('classgroupFilterGrade', this.value);
+                renderClassGroupTable(filterSel.value);
             };
 
             // 初始加载
