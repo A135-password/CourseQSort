@@ -1478,7 +1478,14 @@ var CourseQSortAPI = (function () {
         for (var i = 0; i < MOCK_SCHEDULE_PLANS.length; i++) {
             if (MOCK_SCHEDULE_PLANS[i].id === id) { plan = MOCK_SCHEDULE_PLANS[i]; break; }
         }
-        if (!plan) return {};
+        // Mock 模式下，如果方案不存在（新标签页 JS 上下文丢失），从 MOCK_COURSES 生成
+        if (!plan) {
+            plan = {
+                id: id, plan_name: '预览方案 #' + id, semester: '2026-spring',
+                status: 'DRAFT', overall_fitness: (0.8 + Math.random() * 0.15).toFixed(2),
+                created_at: new Date().toISOString(), published_at: null
+            };
+        }
         // 如果方案已有条目就用已有的，否则从 MOCK_COURSES 生成
         if (!plan.entries || plan.entries.length === 0) {
             var classrooms = ['A101', 'A102', 'B201', 'B203', 'C301', 'D101', 'D202', 'E401'];
