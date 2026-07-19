@@ -1,4 +1,3 @@
-// CourseQSort Admin UI Controller
 (function() {
     // 预览模式下跳过认证检查，后端模式才需要登录
     if (!CourseQSortAPI.isMockMode() && !CourseQSortAPI.isAuthenticated()) { window.location.href = 'index.html'; return; }

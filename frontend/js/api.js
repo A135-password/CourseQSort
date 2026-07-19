@@ -1,18 +1,3 @@
-/**
- * ========================================
- * CourseQSort API Client
- * 排课规划器 — 前端 API 对接层
- * 后端: Django REST Framework + SimpleJWT
- * Base URL: /api/v1/
- * ========================================
- *
- * 双模式设计:
- *   MOCK 模式 (默认) — 使用内置模拟数据，前端可独立预览
- *   API 模式 — 对接真实 Django 后端，需后端服务运行
- *
- * 切换方式: SetMockMode(false) 或在控制台执行
- *   CourseQSortAPI.setMockMode(false)
- */
 
 var CourseQSortAPI = (function () {
     'use strict';
