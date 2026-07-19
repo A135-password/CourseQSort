@@ -1,3 +1,7 @@
+import time
+
+from django.db import IntegrityError, OperationalError, transaction
+from django.db.models import F
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -9,6 +13,9 @@ from apps.student.bitmap import build_bitmap, has_conflict
 from apps.student.models import Enrollment
 from apps.student.recommendation import recommend_courses
 
+SELECT_RETRY_COUNT = 3
+SELECT_RETRY_DELAY_SECONDS = 0.05
+
 
 class ScheduleView(APIView):
     permission_classes = [IsAuthenticated, IsStudentUser]
@@ -18,16 +25,17 @@ class ScheduleView(APIView):
 
         slots = set()
         courses_data = []
-        for e in enrollments:
-            c = e.course
-            items = c.schedule_items.all()
+        for enrollment in enrollments:
+            course = enrollment.course
+            items = course.schedule_items.all()
             time_slots = [(item.day_of_week, item.period) for item in items]
             slots.update(time_slots)
 
             teacher_name = ""
-            first_teacher = c.teachers.first()
+            first_teacher = course.teachers.first()
             if first_teacher:
                 teacher_name = first_teacher.name
+
             classroom_name = ""
             first_item = items.first()
             if first_item and first_item.classroom:
@@ -35,10 +43,10 @@ class ScheduleView(APIView):
 
             courses_data.append(
                 {
-                    "course_id": c.id,
-                    "name": c.name,
+                    "course_id": course.id,
+                    "name": course.name,
                     "teacher": teacher_name,
-                    "time_slots": [{"day_of_week": d, "period": p} for d, p in time_slots],
+                    "time_slots": [{"day_of_week": day, "period": period} for day, period in time_slots],
                     "classroom": classroom_name,
                 }
             )
@@ -61,10 +69,9 @@ class CourseListView(APIView):
         major_id = request.query_params.get("major")
         keyword = request.query_params.get("keyword")
 
-        # Build user's schedule bitmap
         user_slots = set()
-        for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-            for item in e.course.schedule_items.all():
+        for enrollment in Enrollment.objects.filter(user=request.user).select_related("course"):
+            for item in enrollment.course.schedule_items.all():
                 user_slots.add((item.day_of_week, item.period))
         user_bitmap = build_bitmap(list(user_slots))
 
@@ -75,41 +82,43 @@ class CourseListView(APIView):
             courses = courses.filter(name__icontains=keyword)
 
         results = []
-        for c in courses:
-            time_slots_raw = list(set((item.day_of_week, item.period) for item in c.schedule_items.all()))
+        for course in courses:
+            time_slots_raw = list(set((item.day_of_week, item.period) for item in course.schedule_items.all()))
             course_bitmap = build_bitmap(time_slots_raw)
             conflict = has_conflict(user_bitmap, course_bitmap)
 
             conflict_with = []
             if conflict:
-                for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-                    e_slots = set((item.day_of_week, item.period) for item in e.course.schedule_items.all())
-                    overlap = e_slots & set(time_slots_raw)
+                for enrollment in Enrollment.objects.filter(user=request.user).select_related("course"):
+                    enrollment_slots = set(
+                        (item.day_of_week, item.period) for item in enrollment.course.schedule_items.all()
+                    )
+                    overlap = enrollment_slots & set(time_slots_raw)
                     if overlap:
                         conflict_with.append(
                             {
-                                "course_id": e.course.id,
-                                "name": e.course.name,
-                                "time_slots": [{"day_of_week": d, "period": p} for d, p in overlap],
+                                "course_id": enrollment.course.id,
+                                "name": enrollment.course.name,
+                                "time_slots": [{"day_of_week": day, "period": period} for day, period in overlap],
                             }
                         )
 
             teacher_name = ""
-            first_teacher = c.teachers.first()
+            first_teacher = course.teachers.first()
             if first_teacher:
                 teacher_name = first_teacher.name
-            enrolled_count = c.enrollments.count()
-            capacity = c.expected_student_count or 9999
+            enrolled_count = course.enrollments.count()
+            capacity = course.expected_student_count or 9999
 
             results.append(
                 {
-                    "course_id": c.id,
-                    "name": c.name,
-                    "credit": c.credit,
+                    "course_id": course.id,
+                    "name": course.name,
+                    "credit": course.credit,
                     "teacher": teacher_name,
                     "capacity": capacity,
                     "enrolled_count": enrolled_count,
-                    "time_slots": [{"day_of_week": d, "period": p} for d, p in time_slots_raw],
+                    "time_slots": [{"day_of_week": day, "period": period} for day, period in time_slots_raw],
                     "remaining_capacity": capacity - enrolled_count,
                     "conflict": conflict,
                     "conflict_with": conflict_with,
@@ -133,25 +142,25 @@ class ConflictDetailView(APIView):
 
         conflict_courses = []
         conflict_slots = set()
-        for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-            e_slots = set((item.day_of_week, item.period) for item in e.course.schedule_items.all())
-            overlap = e_slots & set(course_slots_raw)
+        for enrollment in Enrollment.objects.filter(user=request.user).select_related("course"):
+            enrollment_slots = set((item.day_of_week, item.period) for item in enrollment.course.schedule_items.all())
+            overlap = enrollment_slots & set(course_slots_raw)
             if overlap:
-                for d, p in overlap:
-                    conflict_slots.add((d, p))
-                    first_item = e.course.schedule_items.filter(day_of_week=d, period=p).first()
+                for day, period in overlap:
+                    conflict_slots.add((day, period))
+                    first_item = enrollment.course.schedule_items.filter(day_of_week=day, period=period).first()
                     classroom_name = first_item.classroom.name if first_item and first_item.classroom else ""
                     teacher_name = ""
-                    first_teacher = e.course.teachers.first()
+                    first_teacher = enrollment.course.teachers.first()
                     if first_teacher:
                         teacher_name = first_teacher.name
                     conflict_courses.append(
                         {
-                            "course_id": e.course.id,
-                            "name": e.course.name,
+                            "course_id": enrollment.course.id,
+                            "name": enrollment.course.name,
                             "teacher": teacher_name,
-                            "day_of_week": d,
-                            "period": p,
+                            "day_of_week": day,
+                            "period": period,
                             "classroom": classroom_name,
                             "conflict_type": "TIME_OVERLAP",
                         }
@@ -161,7 +170,7 @@ class ConflictDetailView(APIView):
             {
                 "course_id": course.id,
                 "course_name": course.name,
-                "course_time_slots": [{"day_of_week": d, "period": p} for d, p in course_slots_raw],
+                "course_time_slots": [{"day_of_week": day, "period": period} for day, period in course_slots_raw],
                 "conflict_courses": conflict_courses,
                 "bitmap": course_bitmap,
                 "conflict_bitmap": build_bitmap(list(conflict_slots)),
@@ -173,64 +182,94 @@ class SelectCourseView(APIView):
     permission_classes = [IsAuthenticated, IsStudentUser]
 
     def post(self, request, pk=None):
-        try:
-            course = Course.objects.prefetch_related("schedule_items").get(id=pk)
-        except Course.DoesNotExist:
-            return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+        for attempt in range(SELECT_RETRY_COUNT):
+            try:
+                with transaction.atomic():
+                    locked_rows = Course.objects.filter(id=pk).update(
+                        expected_student_count=F("expected_student_count")
+                    )
+                    if not locked_rows:
+                        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        if Enrollment.objects.filter(user=request.user, course=course).exists():
-            return Response(
-                {
-                    "course_id": course.id,
-                    "status": "ALREADY_SELECTED",
-                    "message": "已选择该课程",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+                    course = Course.objects.prefetch_related("schedule_items").get(id=pk)
 
-        # Capacity check
-        enrolled_count = course.enrollments.count()
-        capacity = course.expected_student_count or 9999
-        if enrolled_count >= capacity:
-            return Response(
-                {
-                    "course_id": course.id,
-                    "status": "FULL",
-                    "message": f"该课程容量已满（{capacity}/{capacity}）",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+                    if Enrollment.objects.filter(user=request.user, course=course).exists():
+                        return Response(
+                            {
+                                "course_id": course.id,
+                                "status": "ALREADY_SELECTED",
+                                "message": "已选择该课程",
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
 
-        # Conflict check
-        user_slots = set()
-        for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-            for item in e.course.schedule_items.all():
-                user_slots.add((item.day_of_week, item.period))
-        course_slots = set((item.day_of_week, item.period) for item in course.schedule_items.all())
-        overlap = user_slots & course_slots
-        if overlap:
-            conflict_names = []
-            for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-                e_slots = set((item.day_of_week, item.period) for item in e.course.schedule_items.all())
-                if e_slots & course_slots:
-                    conflict_names.append(e.course.name)
-            return Response(
-                {
-                    "course_id": course.id,
-                    "status": "CONFLICT",
-                    "message": f'课程时间与已选课程「{"、".join(conflict_names)}」冲突',
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+                    capacity = course.expected_student_count or 9999
+                    enrolled_count = Enrollment.objects.filter(course=course).count()
+                    if enrolled_count >= capacity:
+                        return Response(
+                            {
+                                "course_id": course.id,
+                                "status": "FULL",
+                                "message": f"该课程容量已满（{capacity}/{capacity}）",
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
 
-        Enrollment.objects.create(user=request.user, course=course)
+                    current_enrollments = list(Enrollment.objects.filter(user=request.user).select_related("course"))
+                    user_slots = set()
+                    for enrollment in current_enrollments:
+                        for item in enrollment.course.schedule_items.all():
+                            user_slots.add((item.day_of_week, item.period))
+
+                    course_slots = set((item.day_of_week, item.period) for item in course.schedule_items.all())
+                    if user_slots & course_slots:
+                        conflict_names = []
+                        for enrollment in current_enrollments:
+                            enrollment_slots = set(
+                                (item.day_of_week, item.period) for item in enrollment.course.schedule_items.all()
+                            )
+                            if enrollment_slots & course_slots:
+                                conflict_names.append(enrollment.course.name)
+                        return Response(
+                            {
+                                "course_id": course.id,
+                                "status": "CONFLICT",
+                                "message": f'课程时间与已选课程「{"、".join(conflict_names)}」冲突',
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
+
+                    Enrollment.objects.create(user=request.user, course=course)
+                    return Response(
+                        {
+                            "course_id": course.id,
+                            "status": "SELECTED",
+                            "message": "选课成功",
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+            except IntegrityError:
+                return Response(
+                    {
+                        "course_id": pk,
+                        "status": "ALREADY_SELECTED",
+                        "message": "已选择该课程",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            except OperationalError as exc:
+                if "locked" in str(exc).lower() and attempt < SELECT_RETRY_COUNT - 1:
+                    time.sleep(SELECT_RETRY_DELAY_SECONDS)
+                    continue
+                raise
+
         return Response(
             {
-                "course_id": course.id,
-                "status": "SELECTED",
-                "message": "选课成功",
+                "course_id": pk,
+                "status": "RETRY_LATER",
+                "message": "当前选课请求过于频繁，请稍后重试",
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
 
@@ -268,8 +307,8 @@ class FreeSlotsView(APIView):
 
     def get(self, request):
         user_slots = set()
-        for e in Enrollment.objects.filter(user=request.user).select_related("course"):
-            for item in e.course.schedule_items.all():
+        for enrollment in Enrollment.objects.filter(user=request.user).select_related("course"):
+            for item in enrollment.course.schedule_items.all():
                 user_slots.add((item.day_of_week, item.period))
 
         period_labels = {
