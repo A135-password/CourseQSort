@@ -1,4 +1,5 @@
 import random
+import time
 import uuid
 from unittest.mock import patch
 
@@ -7,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Profile
-from apps.courses.models import Classroom, Course, Teacher
+from apps.courses.models import Classroom, Course, CourseScheduleItem, Teacher
 from apps.protected_slots.models import ProtectedSlot
 from apps.scheduling.algorithm.constraints import PE_KEYWORDS, check_hard_constraints, is_feasible
 from apps.scheduling.models import ScheduleEntry, SchedulePlan, TaskRecord
@@ -321,3 +322,56 @@ class SchedulingAdminApiTests(SchedulingApiTestMixin, TestCase):
             self.assertIn(entry.day_of_week, [1, 2, 3, 4, 5])
             self.assertNotEqual(entry.period, 5)
             self.assertEqual(entry.week, 1)
+
+
+class SchedulingPerformanceTests(SchedulingApiTestMixin, TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = User.objects.create_user(
+            username="schedule-performance-admin",
+            password="secret123",
+        )
+        Profile.objects.create(
+            user=self.admin_user,
+            role="ADMIN",
+            name="Schedule Performance Admin",
+        )
+        self.client.force_authenticate(self.admin_user)
+
+        self.teacher = Teacher.objects.create(name="Schedule Performance Teacher", employee_no="SP001")
+        self.classroom = Classroom.objects.create(name="Schedule Performance Room", capacity=120)
+
+        for index in range(24):
+            course = self.create_course(f"Perf Schedule Course {index:02d}")
+            course.teachers.add(self.teacher)
+            for offset in range(2):
+                CourseScheduleItem.objects.create(
+                    course=course,
+                    teacher=self.teacher,
+                    classroom=self.classroom,
+                    day_of_week=((index + offset) % 5) + 1,
+                    period=((index * 2 + offset) % 11) + 1,
+                    week_start=1,
+                    week_end=4,
+                )
+
+    def test_schedule_generation_performance_smoke(self):
+        started_at = time.perf_counter()
+        response = self.client.post(
+            "/api/v1/admin/schedule/generate/",
+            {
+                "plan_name": "Performance Plan",
+                "semester": "2026-1",
+                "major_ids": [],
+                "algorithm_config": {"total_weeks": 4},
+            },
+            format="json",
+        )
+        duration = time.perf_counter() - started_at
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data["status"], "SUCCESS")
+        task = TaskRecord.objects.get(task_id=response.data["task_id"])
+        self.assertEqual(task.status, "SUCCESS")
+        self.assertEqual(task.plan.entries.count(), 24 * 2 * 4)
+        self.assertLess(duration, 5.0)

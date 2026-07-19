@@ -1,3 +1,4 @@
+import time
 import uuid
 from unittest.mock import patch
 
@@ -7,7 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import Profile
 from apps.conflict_analysis.models import ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
-from apps.courses.models import Course
+from apps.courses.models import Course, CourseScheduleItem
 
 
 class ConflictAnalysisTestMixin:
@@ -119,8 +120,6 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
         )
 
     def test_run_endpoint_executes_real_conflict_analysis(self):
-        from apps.courses.models import CourseScheduleItem
-
         CourseScheduleItem.objects.create(
             course=self.course_a,
             day_of_week=1,
@@ -176,3 +175,56 @@ class ConflictAnalysisApiTests(ConflictAnalysisTestMixin, TestCase):
         )
         self.assertEqual(pair.conflicting_student_count, 1)
         self.assertAlmostEqual(pair.conflict_rate, 0.33, places=2)
+
+
+class ConflictAnalysisPerformanceTests(ConflictAnalysisTestMixin, TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = User.objects.create_user(
+            username="conflict-performance-admin",
+            password="secret123",
+        )
+        Profile.objects.create(
+            user=self.admin_user,
+            role="ADMIN",
+            name="Conflict Performance Admin",
+        )
+        self.client.force_authenticate(self.admin_user)
+
+        self.courses = []
+        for index in range(32):
+            course = self.create_course(f"Perf Conflict Course {index:02d}")
+            self.courses.append(course)
+            CourseScheduleItem.objects.create(
+                course=course,
+                day_of_week=(index % 5) + 1,
+                period=(index % 4) + 1,
+            )
+            CourseScheduleItem.objects.create(
+                course=course,
+                day_of_week=((index + 1) % 5) + 1,
+                period=((index + 1) % 4) + 1,
+            )
+
+    def test_conflict_analysis_performance_smoke(self):
+        started_at = time.perf_counter()
+        response = self.client.post(
+            "/api/v1/admin/conflict-analysis/run/",
+            {
+                "semester": "2026-1",
+                "course_ids": [course.id for course in self.courses],
+                "threshold": 1,
+            },
+            format="json",
+        )
+        duration = time.perf_counter() - started_at
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.data["status"], "SUCCESS")
+
+        task = ConflictTaskRecord.objects.get(task_id=response.data["task_id"])
+        expected_pairs = len(self.courses) * (len(self.courses) - 1) // 2
+        self.assertEqual(task.status, "SUCCESS")
+        self.assertEqual(task.total_pairs, expected_pairs)
+        self.assertEqual(task.analyzed_pairs, expected_pairs)
+        self.assertLess(duration, 5.0)
