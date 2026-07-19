@@ -274,7 +274,9 @@
         subtitle.textContent = '方案 #' + planId;
         CourseQSortAPI.admin.getSchedulePlan(parseInt(planId))
             .then(function(plan) {
+                console.log('[timetable] plan loaded:', plan);
                 allEntries = plan.entries || [];
+                console.log('[timetable] entries count:', allEntries.length);
                 // 找出最大周数
                 var weeks = allEntries.map(function(e) { return e.week || 1; });
                 if (weeks.length > 0) {
@@ -283,8 +285,9 @@
                 buildWeekSelector();
                 goWeek(curWeek);
             })
-            .catch(function() {
-                loadingEl.innerHTML = '<p class="text-danger">加载方案失败，请确认该方案存在</p>';
+            .catch(function(err) {
+                console.error('[timetable] load plan failed:', err);
+                loadingEl.innerHTML = '<p class="text-danger">加载方案失败，请确认该方案存在<br><small>' + (err&&err.message||'') + '</small></p>';
             });
     } else {
         subtitle.textContent = '我的课表';

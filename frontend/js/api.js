@@ -1562,8 +1562,9 @@ var CourseQSortAPI = (function () {
     });
 
     var _mockPlanEntryId = 1;
+    var _mockTaskStore = {};
+
     registerMock('POST', '/admin/schedule/generate/', function (body) {
-        // 从 MOCK_COURSES 生成真实的排课条目
         var classrooms = ['A101', 'A102', 'B201', 'B203', 'C301', 'D101', 'D202', 'E401'];
         var planId = Date.now();
         var entries = [];
@@ -1595,11 +1596,27 @@ var CourseQSortAPI = (function () {
         };
         MOCK_SCHEDULE_PLANS.unshift(newPlan);
         var taskId = 'mock_task_' + planId;
+        // 记录任务开始时间，模拟 3-5 秒的渐进式生成
+        _mockTaskStore[taskId] = { startTime: Date.now(), planId: planId, totalEntries: entries.length };
         return { task_id: taskId, status: 'PENDING' };
     });
 
     registerMockPattern('GET', '/admin/schedule/tasks/{id}/', function (body, vars) {
-        return { task_id: vars.id, status: 'SUCCESS', progress: 1.0, current_generation: 500, best_fitness: 0.93, total_entries: 156, plan_id: 3 };
+        var taskId = vars.id;
+        var stored = _mockTaskStore[taskId];
+        if (!stored) {
+            // 新标签页：直接返回完成
+            return { task_id: taskId, status: 'SUCCESS', progress: 1.0, current_generation: 200 + Math.floor(Math.random() * 300), best_fitness: (0.85 + Math.random() * 0.12).toFixed(2), total_entries: 156 };
+        }
+        var elapsed = (Date.now() - stored.startTime) / 1000;
+        var duration = 3 + Math.random() * 2; // 3-5 秒完成
+        var progress = Math.min(1.0, elapsed / duration);
+        var gen = Math.floor(progress * (200 + Math.floor(Math.random() * 300)));
+        var fitness = (0.5 + progress * 0.4 + Math.random() * 0.05).toFixed(2);
+        if (progress >= 1.0) {
+            return { task_id: taskId, status: 'SUCCESS', progress: 1.0, current_generation: gen, best_fitness: parseFloat(fitness), total_entries: stored.totalEntries };
+        }
+        return { task_id: taskId, status: 'RUNNING', progress: progress, current_generation: gen, best_fitness: parseFloat(fitness), total_entries: 0 };
     });
 
     registerMock('POST', '/admin/conflict-analysis/run/', function () {
