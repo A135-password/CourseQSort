@@ -1,5 +1,6 @@
+import uuid
+
 import openpyxl
-from django.db import transaction
 from apps.courses.models import Course, Major, Teacher
 
 
@@ -76,13 +77,37 @@ def import_courses_from_excel(file):
                 except ValueError:
                     pass
 
-            Course.objects.create(
+            teacher_names = []
+            if 'teacher' in col_map:
+                raw_teacher = str(row[col_map['teacher']] or '').strip()
+                if raw_teacher:
+                    normalized = (
+                        raw_teacher.replace('，', ',')
+                        .replace('、', ',')
+                        .replace(';', ',')
+                        .replace('|', ',')
+                    )
+                    teacher_names = [
+                        part.strip() for part in normalized.split(',')
+                        if part.strip()
+                    ]
+
+            course = Course.objects.create(
                 name=name, code=code, credit=credit,
                 hours=hours, semester=semester,
                 major=major,
                 is_professional_course=is_professional,
                 expected_student_count=count,
+                course_id_from_source=(
+                    f'import-{code or "course"}-{row_idx}-{uuid.uuid4().hex[:8]}'
+                ),
             )
+            if teacher_names:
+                teachers = []
+                for teacher_name in teacher_names:
+                    teacher, _ = Teacher.objects.get_or_create(name=teacher_name)
+                    teachers.append(teacher)
+                course.teachers.set(teachers)
             imported += 1
         except Exception as e:
             errors.append({'row': row_idx, 'reason': str(e)})
