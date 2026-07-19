@@ -42,7 +42,12 @@ var CourseQSortAPI = (function () {
     };
 
     // 页面加载时从 localStorage 恢复 JWT 模式（防止页面跳转后 CONFIG 复位导致误判未登录）
-    if (localStorage.getItem(TOKEN_KEYS.ACCESS)) {
+    // 优先读取 sessionStorage 中用户手动选择的登录模式
+    var savedMode = sessionStorage.getItem('loginMode');
+    if (savedMode) {
+        CONFIG.LOGIN_MODE = savedMode;
+        CONFIG.USE_MOCK = (savedMode !== 'jwt');
+    } else if (localStorage.getItem(TOKEN_KEYS.ACCESS)) {
         CONFIG.LOGIN_MODE = 'jwt';
         CONFIG.USE_MOCK = false;
     }
