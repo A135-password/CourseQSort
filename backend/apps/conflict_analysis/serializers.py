@@ -1,14 +1,13 @@
 from rest_framework import serializers
+
+from apps.conflict_analysis.models import ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
 from apps.courses.models import Course
-from apps.conflict_analysis.models import (
-    ConflictAnalysisResult, ConflictPair, ConflictTaskRecord
-)
 
 
 class NestedCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
-        fields = ['id', 'name']
+        fields = ["id", "name"]
 
 
 class RunAnalysisSerializer(serializers.Serializer):
@@ -20,15 +19,13 @@ class RunAnalysisSerializer(serializers.Serializer):
 class ConflictTaskStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConflictTaskRecord
-        fields = ['task_id', 'status', 'progress', 'analyzed_pairs',
-                  'total_pairs', 'conflict_pairs_found']
+        fields = ["task_id", "status", "progress", "analyzed_pairs", "total_pairs", "conflict_pairs_found"]
 
 
 class ConflictResultListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConflictAnalysisResult
-        fields = ['id', 'semester', 'course_count', 'conflict_pairs_count',
-                  'threshold', 'created_at']
+        fields = ["id", "semester", "course_count", "conflict_pairs_count", "threshold", "created_at"]
 
 
 class ConflictPairSerializer(serializers.ModelSerializer):
@@ -37,5 +34,4 @@ class ConflictPairSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ConflictPair
-        fields = ['course_a', 'course_b',
-                  'conflicting_student_count', 'conflict_rate']
+        fields = ["course_a", "course_b", "conflicting_student_count", "conflict_rate"]

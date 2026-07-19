@@ -7,8 +7,8 @@
 3. 更新任务状态和进度
 """
 
-from apps.scheduling.models import TaskRecord
 from apps.scheduling.algorithm import run as run_optimizer
+from apps.scheduling.models import TaskRecord
 
 
 def run_generate_sync(task_id):
@@ -26,45 +26,41 @@ def run_generate_sync(task_id):
     except TaskRecord.DoesNotExist:
         return
 
-    task.status = 'RUNNING'
+    task.status = "RUNNING"
     task.progress = 0.0
-    task.save(update_fields=['status', 'progress'])
+    task.save(update_fields=["status", "progress"])
 
     try:
         plan = task.plan
         if not plan:
-            raise ValueError('任务没有关联排课方案')
+            raise ValueError("任务没有关联排课方案")
 
         # 进度回调
         def on_progress(progress, generation, best_fitness):
             task.progress = float(progress)
             task.current_generation = generation
             task.best_fitness = float(best_fitness)
-            task.estimated_time_remaining = ''
-            task.save(update_fields=[
-                'progress', 'current_generation',
-                'best_fitness', 'estimated_time_remaining'
-            ])
+            task.estimated_time_remaining = ""
+            task.save(update_fields=["progress", "current_generation", "best_fitness", "estimated_time_remaining"])
 
         # 执行优化算法
         entry_count, best_fitness, stats = run_optimizer(plan, on_progress)
 
         # 更新方案评分
         plan.overall_fitness = round(float(best_fitness), 4)
-        plan.save(update_fields=['overall_fitness'])
+        plan.save(update_fields=["overall_fitness"])
 
         # 更新任务为成功
-        task.status = 'SUCCESS'
+        task.status = "SUCCESS"
         task.progress = 1.0
-        task.current_generation = stats.get('generations', stats.get('total_entries', 0))
+        task.current_generation = stats.get("generations", stats.get("total_entries", 0))
         task.best_fitness = round(float(best_fitness), 4)
-        task.estimated_time_remaining = ''
-        task.save(update_fields=[
-            'status', 'progress', 'current_generation',
-            'best_fitness', 'estimated_time_remaining'
-        ])
+        task.estimated_time_remaining = ""
+        task.save(
+            update_fields=["status", "progress", "current_generation", "best_fitness", "estimated_time_remaining"]
+        )
 
     except Exception as e:
-        task.status = 'FAILED'
+        task.status = "FAILED"
         task.error_message = str(e)
-        task.save(update_fields=['status', 'error_message'])
+        task.save(update_fields=["status", "error_message"])
