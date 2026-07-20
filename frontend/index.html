@@ -75,6 +75,24 @@
 
                         <div class="text-center mt-3">
                             <small>没有账号？<a href="register.html" class="fw-bold">注册新账号</a></small>
+                            <span class="mx-2 text-muted">|</span>
+                            <small><a href="#" class="text-secondary" id="forgot-password-link">忘记密码</a></small>
+                        </div>
+
+                        <!-- 忘记密码弹窗 -->
+                        <div class="modal fade" id="reset-password-modal" tabindex="-1">
+                            <div class="modal-dialog modal-sm"><div class="modal-content">
+                                <div class="modal-header"><h6 class="modal-title">重置密码</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                <div class="modal-body">
+                                    <p class="small text-muted">输入学号/工号和姓名即可重置密码</p>
+                                    <div class="mb-2"><label class="form-label small">学号 / 工号</label><input class="form-control form-control-sm" id="reset-username" placeholder="请输入学号或工号"></div>
+                                    <div class="mb-2"><label class="form-label small">真实姓名</label><input class="form-control form-control-sm" id="reset-name" placeholder="请输入姓名"></div>
+                                    <div class="mb-2"><label class="form-label small">新密码</label><input type="password" class="form-control form-control-sm" id="reset-new-password" placeholder="至少6位"></div>
+                                    <p class="text-danger small mt-2" id="reset-error-msg" style="display:none;"></p>
+                                    <p class="text-success small mt-2" id="reset-success-msg" style="display:none;"></p>
+                                </div>
+                                <div class="modal-footer"><button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button><button class="btn btn-primary btn-sm" id="reset-submit-btn">重置密码</button></div>
+                            </div></div>
                         </div>
                     </div>
                 </div>
@@ -260,6 +278,42 @@
             sessionStorage.setItem('studentName', name);
             sessionStorage.setItem('studentId', studentId);
             window.location.href = 'student.html';
+        });
+
+        // 忘记密码
+        document.getElementById('forgot-password-link').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('reset-error-msg').style.display = 'none';
+            document.getElementById('reset-success-msg').style.display = 'none';
+            new bootstrap.Modal(document.getElementById('reset-password-modal')).show();
+        });
+        document.getElementById('reset-submit-btn').addEventListener('click', async function() {
+            var errorEl = document.getElementById('reset-error-msg');
+            var successEl = document.getElementById('reset-success-msg');
+            var btn = document.getElementById('reset-submit-btn');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+            var username = document.getElementById('reset-username').value.trim();
+            var name = document.getElementById('reset-name').value.trim();
+            var newPwd = document.getElementById('reset-new-password').value.trim();
+            if (!username) { errorEl.textContent = '请输入学号或工号'; errorEl.style.display = 'block'; return; }
+            if (!name) { errorEl.textContent = '请输入真实姓名'; errorEl.style.display = 'block'; return; }
+            if (!newPwd || newPwd.length < 6) { errorEl.textContent = '新密码至少6位'; errorEl.style.display = 'block'; return; }
+            btn.disabled = true; btn.textContent = '重置中...';
+            try {
+                var r = await CourseQSortAPI.auth.resetPassword(username, name, newPwd);
+                successEl.textContent = r.detail || '密码修改成功';
+                successEl.style.display = 'block';
+                setTimeout(function() { bootstrap.Modal.getInstance(document.getElementById('reset-password-modal')).hide(); }, 1500);
+            } catch (err) {
+                var msg = '重置失败，请重试';
+                if (err.data) {
+                    if (err.data.username) msg = Array.isArray(err.data.username) ? err.data.username[0] : err.data.username;
+                    else if (err.data.name) msg = Array.isArray(err.data.name) ? err.data.name[0] : err.data.name;
+                }
+                errorEl.textContent = msg; errorEl.style.display = 'block';
+            }
+            btn.disabled = false; btn.textContent = '重置密码';
         });
 
         // 登录页始终显示登录表单，不自动跳转

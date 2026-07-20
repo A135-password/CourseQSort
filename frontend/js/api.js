@@ -330,6 +330,23 @@ var CourseQSortAPI = (function () {
 
     // ======================== 注册 Mock 处理器 ========================
 
+    registerMock('POST', '/auth/reset-password/', function (body) {
+        var found = false;
+        for (var i = 0; i < MOCK_USERS.length; i++) {
+            if (MOCK_USERS[i].username === body.username && MOCK_USERS[i].name === body.name) {
+                MOCK_USERS[i].password = body.new_password;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            var err = new Error('未找到该学号/工号对应的账号，请确认信息正确或先注册');
+            err.status = 400; err.data = { username: '未找到该学号/工号对应的账号，请确认信息正确或先注册' };
+            throw err;
+        }
+        return { detail: '密码修改成功，请使用新密码登录' };
+    });
+
     registerMock('POST', '/auth/register/', function (body) {
         // Mock 注册：模拟后端验证逻辑
         var name = body.name || '';
@@ -1695,6 +1712,9 @@ var CourseQSortAPI = (function () {
             },
             register: function (payload) {
                 return apiCall('POST', '/auth/register/', payload);
+            },
+            resetPassword: function (username, name, newPassword) {
+                return apiCall('POST', '/auth/reset-password/', { username: username, name: name, new_password: newPassword });
             },
             logout: function () {
                 var refresh = getRefreshToken();

@@ -155,3 +155,35 @@ class RegisterSerializer(serializers.Serializer):
                 teacher.save(update_fields=["user"])
 
         return user
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    """重置密码 — 只需要学号/工号 + 姓名即可修改密码"""
+
+    username = serializers.CharField(min_length=1, max_length=50, help_text="学号或工号")
+    name = serializers.CharField(min_length=1, max_length=50, help_text="真实姓名")
+    new_password = serializers.CharField(min_length=6, max_length=50, write_only=True)
+
+    def validate(self, attrs):
+        from django.contrib.auth.models import User
+
+        username = attrs["username"]
+        name = attrs["name"]
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"username": "未找到该学号/工号对应的账号，请确认信息正确或先注册"})
+
+        profile = getattr(user, "profile", None)
+        if not profile or profile.name != name:
+            raise serializers.ValidationError({"name": "姓名不匹配，请确认输入的姓名与注册时一致"})
+
+        attrs["_user"] = user
+        return attrs
+
+    def create(self, validated_data):
+        user = validated_data["_user"]
+        user.set_password(validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return user

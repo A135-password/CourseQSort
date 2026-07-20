@@ -5,7 +5,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from apps.accounts.serializers import LoginSerializer, LogoutSerializer, RegisterSerializer, UserSerializer
+from apps.accounts.serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    RegisterSerializer,
+    ResetPasswordSerializer,
+    UserSerializer,
+)
 
 
 class LoginView(APIView):
@@ -14,9 +20,15 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(
-                {"detail": "No active account found with the given credentials"}, status=status.HTTP_401_UNAUTHORIZED
-            )
+            # 提取中文错误信息
+            errors = serializer.errors
+            detail = "账号或密码错误"
+            for key in ("detail", "non_field_errors", "username", "password"):
+                if key in errors:
+                    val = errors[key]
+                    detail = val[0] if isinstance(val, list) else str(val)
+                    break
+            return Response({"detail": detail}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.validated_data)
 
 
@@ -88,6 +100,19 @@ class RegisterView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class ResetPasswordView(APIView):
+    """重置密码 — 凭学号/工号 + 姓名验证，无需旧密码"""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        return Response({"detail": "密码修改成功，请使用新密码登录"}, status=status.HTTP_200_OK)
 
 
 class MeView(APIView):
